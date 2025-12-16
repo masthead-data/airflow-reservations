@@ -1,0 +1,30 @@
+{
+    "reservation_config": [
+        {
+            "tag": "e2e-critical",
+            "reservation": "projects/test-project/locations/US/reservations/e2e-test-reservation",
+            "tasks": [
+                "test_reservation_dag.bq_insert_job_task"
+            ]
+        },
+        {
+            "tag": "e2e-standard",
+            "reservation": "projects/test-project/locations/US/reservations/e2e-test-reservation-2",
+            "tasks": [
+                "test_reservation_dag.bq_execute_query_task"
+            ]
+        },
+        {
+            "tag": "e2e-ondemand",
+            "reservation": "none",
+            "tasks": [
+                "test_reservation_dag.bq_ondemand_task"
+            ]
+        },
+        {
+            "tag": "skip",
+            "reservation": null,
+            "tasks": []
+        }
+    ]
+}

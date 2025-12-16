@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "masthead-airflow-policy"
+version = "0.1.0"
+description = "Airflow Cluster Policy for BigQuery reservation management"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.8"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Framework :: Apache Airflow",
+    "Topic :: Database",
+]
+keywords = ["airflow", "bigquery", "reservations", "capacity", "masthead"]
+dependencies = [
+    "apache-airflow>=2.6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/masthead-data/airflow-reservations"
+Repository = "https://github.com/masthead-data/airflow-reservations"
+
+[project.entry-points.'airflow.policy']
+masthead = "masthead_airflow_policy.policy"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
