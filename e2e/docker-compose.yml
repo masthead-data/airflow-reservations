@@ -6,11 +6,9 @@
 # Usage:
 #   ./e2e/run_test.sh
 
-x-airflow-common:
-  &airflow-common
+x-airflow-common: &airflow-common
   image: apache/airflow:2.10.4-python3.11
-  environment:
-    &airflow-common-env
+  environment: &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
     AIRFLOW__CORE__FERNET_KEY: ''
@@ -20,7 +18,7 @@ x-airflow-common:
     # Enable debug logging for our plugin
     AIRFLOW__LOGGING__LOGGING_LEVEL: 'INFO'
     # Point to our test config
-    MASTHEAD_CONFIG_PATH: '/opt/airflow/dags/masthead_config.json'
+    RESERVATIONS_CONFIG_PATH: '/opt/airflow/dags/reservations_config.json'
     # Required for standalone mode
     _AIRFLOW_DB_MIGRATE: 'true'
     _AIRFLOW_WWW_USER_CREATE: 'true'
@@ -32,8 +30,7 @@ x-airflow-common:
     - ../src:/opt/airflow/plugin_src:ro
     - ../pyproject.toml:/opt/airflow/plugin_src_pyproject/pyproject.toml:ro
   user: "${AIRFLOW_UID:-50000}:0"
-  depends_on:
-    &airflow-common-depends-on
+  depends_on: &airflow-common-depends-on
     postgres:
       condition: service_healthy
 
@@ -47,7 +44,7 @@ services:
     volumes:
       - postgres-db-volume:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "airflow"]
+      test: [ "CMD", "pg_isready", "-U", "airflow" ]
       interval: 5s
       retries: 5
     restart: always
@@ -81,7 +78,7 @@ services:
     ports:
       - "8080:8080"
     healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      test: [ "CMD", "curl", "--fail", "http://localhost:8080/health" ]
       interval: 10s
       timeout: 10s
       retries: 5
@@ -96,7 +93,7 @@ services:
     command: >
       bash -c "pip install /opt/airflow/plugin_src --no-deps && airflow scheduler"
     healthcheck:
-      test: ["CMD-SHELL", 'airflow jobs check --job-type SchedulerJob --hostname "$${HOSTNAME}"']
+      test: [ "CMD-SHELL", 'airflow jobs check --job-type SchedulerJob --hostname "$${HOSTNAME}"' ]
       interval: 10s
       timeout: 10s
       retries: 5
@@ -111,7 +108,7 @@ services:
     command: >
       bash -c "pip install /opt/airflow/plugin_src --no-deps && airflow triggerer"
     healthcheck:
-      test: ["CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"']
+      test: [ "CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"' ]
       interval: 10s
       timeout: 10s
       retries: 5

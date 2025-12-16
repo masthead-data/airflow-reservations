@@ -1,8 +1,9 @@
-.PHONY: install install-dev test test-cov lint format e2e clean help
+.PHONY: install install-dev test test-cov lint format e2e clean help setup
 
 # Default target
 help:
 	@echo "Available targets:"
+	@echo "  setup        Install package with dev dependencies (for CI)"
 	@echo "  install      Install package"
 	@echo "  install-dev  Install package with dev dependencies"
 	@echo "  test         Run unit tests"
@@ -11,6 +12,8 @@ help:
 	@echo "  format       Format code"
 	@echo "  e2e          Run E2E tests (requires Docker)"
 	@echo "  clean        Clean build artifacts"
+
+setup: install-dev
 
 install:
 	pip install -e .

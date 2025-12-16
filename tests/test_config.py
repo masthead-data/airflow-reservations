@@ -69,7 +69,7 @@ class TestLoadConfig:
 
     def test_load_valid_config(self, temp_config_file):
         """Test loading a valid config file."""
-        with mock.patch.dict(os.environ, {"MASTHEAD_CONFIG_PATH": temp_config_file}):
+        with mock.patch.dict(os.environ, {"RESERVATIONS_CONFIG_PATH": temp_config_file}):
             result = config.load_config()
 
         assert "reservation_config" in result
@@ -78,7 +78,7 @@ class TestLoadConfig:
     def test_load_missing_file_returns_empty(self):
         """Test that missing config file returns empty dict."""
         with mock.patch.dict(
-            os.environ, {"MASTHEAD_CONFIG_PATH": "/nonexistent/path.json"}
+            os.environ, {"RESERVATIONS_CONFIG_PATH": "/nonexistent/path.json"}
         ):
             result = config.load_config()
 
@@ -91,7 +91,7 @@ class TestLoadConfig:
             temp_path = f.name
 
         try:
-            with mock.patch.dict(os.environ, {"MASTHEAD_CONFIG_PATH": temp_path}):
+            with mock.patch.dict(os.environ, {"RESERVATIONS_CONFIG_PATH": temp_path}):
                 result = config.load_config()
             assert result == {}
         finally:
@@ -99,7 +99,7 @@ class TestLoadConfig:
 
     def test_config_caching(self, temp_config_file):
         """Test that config is cached and not reloaded unnecessarily."""
-        with mock.patch.dict(os.environ, {"MASTHEAD_CONFIG_PATH": temp_config_file}):
+        with mock.patch.dict(os.environ, {"RESERVATIONS_CONFIG_PATH": temp_config_file}):
             result1 = config.load_config()
             result2 = config.load_config()
 
@@ -108,7 +108,7 @@ class TestLoadConfig:
 
     def test_force_reload_bypasses_cache(self, temp_config_file):
         """Test that force_reload ignores the cache."""
-        with mock.patch.dict(os.environ, {"MASTHEAD_CONFIG_PATH": temp_config_file}):
+        with mock.patch.dict(os.environ, {"RESERVATIONS_CONFIG_PATH": temp_config_file}):
             result1 = config.load_config()
             result2 = config.load_config(force_reload=True)
 
@@ -121,28 +121,28 @@ class TestGetReservation:
 
     def test_get_existing_reservation(self, temp_config_file):
         """Test getting a reservation that exists."""
-        with mock.patch.dict(os.environ, {"MASTHEAD_CONFIG_PATH": temp_config_file}):
+        with mock.patch.dict(os.environ, {"RESERVATIONS_CONFIG_PATH": temp_config_file}):
             result = config.get_reservation("dag_a", "task_1")
 
         assert result == "projects/p1/locations/US/reservations/res1"
 
     def test_get_nonexistent_reservation(self, temp_config_file):
         """Test getting a reservation that doesn't exist returns None."""
-        with mock.patch.dict(os.environ, {"MASTHEAD_CONFIG_PATH": temp_config_file}):
+        with mock.patch.dict(os.environ, {"RESERVATIONS_CONFIG_PATH": temp_config_file}):
             result = config.get_reservation("unknown_dag", "unknown_task")
 
         assert result is None
 
     def test_get_taskgroup_reservation(self, temp_config_file):
         """Test getting a reservation for a TaskGroup task."""
-        with mock.patch.dict(os.environ, {"MASTHEAD_CONFIG_PATH": temp_config_file}):
+        with mock.patch.dict(os.environ, {"RESERVATIONS_CONFIG_PATH": temp_config_file}):
             result = config.get_reservation("dag_c", "group.nested")
 
         assert result == "projects/p3/locations/US/reservations/res3"
 
     def test_on_demand_returns_none_string(self, temp_config_file):
         """Test that 'none' reservation returns the string 'none' for on-demand."""
-        with mock.patch.dict(os.environ, {"MASTHEAD_CONFIG_PATH": temp_config_file}):
+        with mock.patch.dict(os.environ, {"RESERVATIONS_CONFIG_PATH": temp_config_file}):
             result = config.get_reservation("dag_d", "ondemand_task")
 
         # "none" should be returned as-is to inject SET @@reservation_id = 'none'
@@ -150,7 +150,7 @@ class TestGetReservation:
 
     def test_null_reservation_skips_task(self, temp_config_file):
         """Test that null reservation returns None (task is skipped)."""
-        with mock.patch.dict(os.environ, {"MASTHEAD_CONFIG_PATH": temp_config_file}):
+        with mock.patch.dict(os.environ, {"RESERVATIONS_CONFIG_PATH": temp_config_file}):
             result = config.get_reservation("dag_e", "skipped_task")
 
         # null reservation means skip - returns None
@@ -162,7 +162,7 @@ class TestGetReservationEntry:
 
     def test_get_entry_with_tag(self, temp_config_file):
         """Test getting a full entry with tag info."""
-        with mock.patch.dict(os.environ, {"MASTHEAD_CONFIG_PATH": temp_config_file}):
+        with mock.patch.dict(os.environ, {"RESERVATIONS_CONFIG_PATH": temp_config_file}):
             result = config.get_reservation_entry("dag_a", "task_1")
 
         assert result is not None
@@ -171,14 +171,14 @@ class TestGetReservationEntry:
 
     def test_get_entry_not_found(self, temp_config_file):
         """Test getting entry for unknown task."""
-        with mock.patch.dict(os.environ, {"MASTHEAD_CONFIG_PATH": temp_config_file}):
+        with mock.patch.dict(os.environ, {"RESERVATIONS_CONFIG_PATH": temp_config_file}):
             result = config.get_reservation_entry("unknown", "unknown")
 
         assert result is None
 
     def test_get_entry_for_skipped_task(self, temp_config_file):
         """Test getting entry for a task with null reservation."""
-        with mock.patch.dict(os.environ, {"MASTHEAD_CONFIG_PATH": temp_config_file}):
+        with mock.patch.dict(os.environ, {"RESERVATIONS_CONFIG_PATH": temp_config_file}):
             result = config.get_reservation_entry("dag_e", "skipped_task")
 
         # Entry should still be found even though reservation is null

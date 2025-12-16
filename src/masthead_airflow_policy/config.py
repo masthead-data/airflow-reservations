@@ -58,11 +58,11 @@ logger = logging.getLogger(__name__)
 DEFAULT_CONFIG_PATH = os.path.join(
     os.environ.get("AIRFLOW_HOME", "/opt/airflow"),
     "dags",
-    "masthead_config.json",
+    "reservations_config.json",
 )
 
 # Environment variable to override config path
-CONFIG_PATH_ENV_VAR = "MASTHEAD_CONFIG_PATH"
+CONFIG_PATH_ENV_VAR = "RESERVATIONS_CONFIG_PATH"
 
 # Sentinel value to indicate a task should be skipped (not in lookup)
 _SKIP_TASK = object()
@@ -79,7 +79,7 @@ def get_config_path() -> str:
     """Get the path to the Masthead configuration file.
 
     Returns:
-        Path to config file, from MASTHEAD_CONFIG_PATH env var or default location.
+        Path to config file, from RESERVATIONS_CONFIG_PATH env var or default location.
     """
     return os.environ.get(CONFIG_PATH_ENV_VAR, DEFAULT_CONFIG_PATH)
 

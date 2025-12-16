@@ -6,11 +6,11 @@ This package integrates with Airflow's [Cluster Policies](https://airflow.apache
 
 ## Features
 
-- 🔄 **Automatic Injection** - Intercepts `BigQueryInsertJobOperator` and `BigQueryExecuteQueryOperator` tasks
-- 📋 **Lookup-based Configuration** - Uses `dag_id.task_id` → `reservation_id` mappings
-- 🐍 **Python API** - Provides `get_reservation()` for custom BigQuery API calls in PythonOperators
-- ⚡ **Performance Optimized** - Config caching with file mtime-based invalidation
-- 🛡️ **Graceful Error Handling** - Won't crash Airflow on config errors
+- **Automatic Injection** - Intercepts `BigQueryInsertJobOperator` and `BigQueryExecuteQueryOperator` tasks
+- **Lookup-based Configuration** - Uses `dag_id.task_id` → `reservation_id` mappings
+- **Python API** - Provides `get_reservation()` for custom BigQuery API calls in PythonOperators
+- **Performance Optimized** - Config caching with file mtime-based invalidation
+- **Graceful Error Handling** - Won't crash Airflow on config errors
 
 ## Installation
 
@@ -28,7 +28,7 @@ The policy is automatically registered via Airflow's plugin entrypoint system (r
 
 ## Configuration
 
-Create a `masthead_config.json` file in your DAGs folder:
+Create a `reservations_config.json` file in your DAGs folder:
 
 ```json
 {
@@ -53,6 +53,13 @@ Create a `masthead_config.json` file in your DAGs folder:
       "reservation": "none",
       "tasks": [
         "adhoc_dag.quick_query"
+      ]
+    },
+    {
+      "tag": "skip",
+      "reservation": null,
+      "tasks": [
+        "legacy_dag.old_task"
       ]
     }
   ]
@@ -80,12 +87,12 @@ Create a `masthead_config.json` file in your DAGs folder:
 
 By default, the config file is loaded from:
 ```
-$AIRFLOW_HOME/dags/masthead_config.json
+$AIRFLOW_HOME/dags/reservations_config.json
 ```
 
-Override the path using the `MASTHEAD_CONFIG_PATH` environment variable:
+Override the path using the `RESERVATIONS_CONFIG_PATH` environment variable:
 ```bash
-export MASTHEAD_CONFIG_PATH=/custom/path/to/config.json
+export RESERVATIONS_CONFIG_PATH=/custom/path/to/config.json
 ```
 
 ### TaskGroups and Dynamic Tasks
@@ -116,7 +123,7 @@ When Airflow parses your DAGs, this plugin's `task_policy` hook is called for ea
 ```mermaid
 flowchart LR
     A[DAG Parsing] -->|Triggers| B[task_policy hook]
-    B -->|Looks up| C[masthead_config.json]
+    B -->|Looks up| C[reservations_config.json]
     C -->|Returns reservation| B
     B -->|Injects SQL| D[BigQuery Operator]
 ```
@@ -170,11 +177,11 @@ config = load_config()
 
 ## Generating Configuration
 
-Masthead generates the `masthead_config.json` file containing the optimal reservation assignments for your tasks. Users are responsible for pulling this configuration into their Airflow environment.
+Masthead generates the `reservations_config.json` file containing the optimal reservation assignments for your tasks. Users are responsible for pulling this configuration into their Airflow environment.
 
 Typical workflow:
 1. Masthead analyzes your BigQuery workloads
-2. Masthead generates `masthead_config.json` with optimal assignments
+2. Masthead generates `reservations_config.json` with optimal assignments
 3. You pull the config into your DAGs repository
 4. Airflow syncs the updated config file
 5. The policy automatically applies reservations on next task parse

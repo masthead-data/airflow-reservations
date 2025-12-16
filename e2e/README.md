@@ -52,5 +52,5 @@ The test DAG has 3 tasks:
 
 - `docker-compose.yml` - Airflow services configuration
 - `dags/test_reservation_dag.py` - Test DAG with mock BigQuery operators
-- `dags/masthead_config.json` - Reservation mappings for test tasks
+- `dags/reservations_config.json` - Reservation mappings for test tasks
 - `run_test.sh` - Test runner script
