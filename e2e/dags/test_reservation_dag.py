@@ -1,19 +1,9 @@
-"""
-Test DAG for E2E testing of masthead-airflow-policy.
-
-This DAG creates mock BigQuery operators that will have their SQL
-modified by the policy to include reservation assignments.
-
-Since we don't have actual BigQuery credentials, we use a custom
-operator that logs the SQL it would execute, allowing us to verify
-the reservation injection worked.
-"""
-
 from datetime import datetime, timedelta
 
 from airflow import DAG
 from airflow.models.baseoperator import BaseOperator
 from airflow.utils.context import Context
+from airflow.utils.task_group import TaskGroup
 
 
 class MockBigQueryInsertJobOperator(BaseOperator):
@@ -141,5 +131,17 @@ with DAG(
             }
         },
     )
+
+    # Task 5: Task inside a TaskGroup
+    with TaskGroup("my_group") as tg:
+        bq_nested_task = MockBigQueryInsertJobOperator(
+            task_id="nested_task",
+            configuration={
+                "query": {
+                    "query": "SELECT * FROM `project.dataset.nested`",
+                    "useLegacySql": False,
+                }
+            },
+        )
     
-    bq_insert_job >> bq_execute_query >> bq_ondemand >> bq_no_reservation
+    bq_insert_job >> bq_execute_query >> bq_ondemand >> bq_no_reservation >> tg

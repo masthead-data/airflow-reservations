@@ -27,8 +27,7 @@ x-airflow-common: &airflow-common
   volumes:
     - ./dags:/opt/airflow/dags
     - ./logs:/opt/airflow/logs
-    - ../src:/opt/airflow/plugin_src:ro
-    - ../pyproject.toml:/opt/airflow/plugin_src_pyproject/pyproject.toml:ro
+    - ../:/opt/airflow/plugin_src:ro
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on: &airflow-common-depends-on
     postgres:
@@ -56,7 +55,8 @@ services:
       - -c
       - |
         echo "Installing masthead-airflow-policy from local source..."
-        pip install /opt/airflow/plugin_src --no-deps
+        rm -rf /tmp/plugin && cp -r /opt/airflow/plugin_src /tmp/plugin
+        pip install /tmp/plugin --no-deps
         echo "Initializing database..."
         airflow db migrate
         airflow users create \
@@ -74,7 +74,7 @@ services:
   airflow-webserver:
     <<: *airflow-common
     command: >
-      bash -c "pip install /opt/airflow/plugin_src --no-deps && airflow webserver"
+      bash -c "rm -rf /tmp/plugin && cp -r /opt/airflow/plugin_src /tmp/plugin && pip install /tmp/plugin --no-deps && airflow webserver"
     ports:
       - "8080:8080"
     healthcheck:
@@ -91,7 +91,7 @@ services:
   airflow-scheduler:
     <<: *airflow-common
     command: >
-      bash -c "pip install /opt/airflow/plugin_src --no-deps && airflow scheduler"
+      bash -c "rm -rf /tmp/plugin && cp -r /opt/airflow/plugin_src /tmp/plugin && pip install /tmp/plugin --no-deps && airflow scheduler"
     healthcheck:
       test: [ "CMD-SHELL", 'airflow jobs check --job-type SchedulerJob --hostname "$${HOSTNAME}"' ]
       interval: 10s
@@ -106,7 +106,7 @@ services:
   airflow-triggerer:
     <<: *airflow-common
     command: >
-      bash -c "pip install /opt/airflow/plugin_src --no-deps && airflow triggerer"
+      bash -c "rm -rf /tmp/plugin && cp -r /opt/airflow/plugin_src /tmp/plugin && pip install /tmp/plugin --no-deps && airflow triggerer"
     healthcheck:
       test: [ "CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"' ]
       interval: 10s

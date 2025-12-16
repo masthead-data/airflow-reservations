@@ -94,7 +94,7 @@ docker compose up -d
 
 # Wait for webserver to be healthy
 log_info "Waiting for Airflow to be ready..."
-MAX_WAIT=120
+MAX_WAIT=300
 WAITED=0
 while [ $WAITED -lt $MAX_WAIT ]; do
     if curl -s http://localhost:8080/health | grep -q '"status": "healthy"' 2>/dev/null; then
@@ -148,6 +148,10 @@ if [ $WAITED -ge $MAX_WAIT ]; then
     log_warn "DAG run did not complete within ${MAX_WAIT}s"
 fi
 
+# Get the Run ID provided by Airflow
+RUN_ID=$(docker compose exec -T airflow-webserver airflow dags list-runs -d test_reservation_dag -o json 2>/dev/null | python3 -c "import sys, json; print(json.load(sys.stdin)[0]['run_id'])" 2>/dev/null)
+log_info "Using Run ID: $RUN_ID"
+
 # Check task logs for reservation injection
 log_info "=========================================="
 log_info "Checking task logs for reservation injection..."
@@ -156,31 +160,37 @@ log_info "=========================================="
 echo ""
 log_info "Task 1: bq_insert_job_task (should have reservation path)"
 echo "---"
-docker compose exec -T airflow-webserver airflow tasks logs test_reservation_dag bq_insert_job_task -1 2>/dev/null | grep -E "(SET @@reservation_id|SUCCESS|FAILURE|SQL Query)" || true
+docker compose exec -T airflow-webserver airflow tasks logs test_reservation_dag bq_insert_job_task "$RUN_ID" 2>/dev/null | grep -E "(SET @@reservation_id|SUCCESS|FAILURE|SQL Query)" || true
 
 echo ""
 log_info "Task 2: bq_execute_query_task (should have reservation path)"
 echo "---"
-docker compose exec -T airflow-webserver airflow tasks logs test_reservation_dag bq_execute_query_task -1 2>/dev/null | grep -E "(SET @@reservation_id|SUCCESS|FAILURE|SQL Query)" || true
+docker compose exec -T airflow-webserver airflow tasks logs test_reservation_dag bq_execute_query_task "$RUN_ID" 2>/dev/null | grep -E "(SET @@reservation_id|SUCCESS|FAILURE|SQL Query)" || true
 
 echo ""
 log_info "Task 3: bq_ondemand_task (should have reservation = 'none' for on-demand)"
 echo "---"
-docker compose exec -T airflow-webserver airflow tasks logs test_reservation_dag bq_ondemand_task -1 2>/dev/null | grep -E "(SET @@reservation_id|SUCCESS|FAILURE|SQL Query)" || true
+docker compose exec -T airflow-webserver airflow tasks logs test_reservation_dag bq_ondemand_task "$RUN_ID" 2>/dev/null | grep -E "(SET @@reservation_id|SUCCESS|FAILURE|SQL Query)" || true
 
 echo ""
 log_info "Task 4: bq_no_reservation_task (should NOT have any reservation)"
 echo "---"
-docker compose exec -T airflow-webserver airflow tasks logs test_reservation_dag bq_no_reservation_task -1 2>/dev/null | grep -E "(SET @@reservation_id|SUCCESS|FAILURE|SQL Query)" || true
+docker compose exec -T airflow-webserver airflow tasks logs test_reservation_dag bq_no_reservation_task "$RUN_ID" 2>/dev/null | grep -E "(SET @@reservation_id|SUCCESS|FAILURE|SQL Query)" || true
+
+echo ""
+log_info "Task 5: my_group.nested_task (should have reservation path)"
+echo "---"
+docker compose exec -T airflow-webserver airflow tasks logs test_reservation_dag my_group.nested_task "$RUN_ID" 2>/dev/null | grep -E "(SET @@reservation_id|SUCCESS|FAILURE|SQL Query)" || true
 
 echo ""
 log_info "=========================================="
 
 # Verify results
-TASK1_LOGS=$(docker compose exec -T airflow-webserver airflow tasks logs test_reservation_dag bq_insert_job_task -1 2>/dev/null || true)
-TASK2_LOGS=$(docker compose exec -T airflow-webserver airflow tasks logs test_reservation_dag bq_execute_query_task -1 2>/dev/null || true)
-TASK3_LOGS=$(docker compose exec -T airflow-webserver airflow tasks logs test_reservation_dag bq_ondemand_task -1 2>/dev/null || true)
-TASK4_LOGS=$(docker compose exec -T airflow-webserver airflow tasks logs test_reservation_dag bq_no_reservation_task -1 2>/dev/null || true)
+TASK1_LOGS=$(docker compose exec -T airflow-webserver airflow tasks logs test_reservation_dag bq_insert_job_task "$RUN_ID" 2>/dev/null || true)
+TASK2_LOGS=$(docker compose exec -T airflow-webserver airflow tasks logs test_reservation_dag bq_execute_query_task "$RUN_ID" 2>/dev/null || true)
+TASK3_LOGS=$(docker compose exec -T airflow-webserver airflow tasks logs test_reservation_dag bq_ondemand_task "$RUN_ID" 2>/dev/null || true)
+TASK4_LOGS=$(docker compose exec -T airflow-webserver airflow tasks logs test_reservation_dag bq_no_reservation_task "$RUN_ID" 2>/dev/null || true)
+TASK5_LOGS=$(docker compose exec -T airflow-webserver airflow tasks logs test_reservation_dag my_group.nested_task "$RUN_ID" 2>/dev/null || true)
 
 PASSED=0
 FAILED=0
@@ -219,6 +229,20 @@ if echo "$TASK4_LOGS" | grep -q "SET @@reservation_id"; then
 else
     log_info "✅ Task 4: Correctly has no reservation (not in config)"
     PASSED=$((PASSED + 1))
+fi
+
+# Task 5: Should have the nested reservation path injected
+if echo "$TASK5_LOGS" | grep -q "e2e-nested-reservation"; then
+    log_info "✅ Task 5: Nested task reservation correctly injected"
+    PASSED=$((PASSED + 1))
+else
+    log_info "Checking alternative log path for Task 5..."
+    # Fallback debug info
+    docker compose exec -T airflow-webserver airflow tasks list test_reservation_dag 2>/dev/null | grep nested || true
+    
+    log_error "❌ Task 5: Nested task reservation NOT found"
+    log_error "Logs content: $(echo "$TASK5_LOGS" | head -n 5)..."
+    FAILED=$((FAILED + 1))
 fi
 
 echo ""

@@ -25,6 +25,13 @@
             "tag": "skip",
             "reservation": null,
             "tasks": []
+        },
+        {
+            "tag": "e2e-nested",
+            "reservation": "projects/test-project/locations/US/reservations/e2e-nested-reservation",
+            "tasks": [
+                "test_reservation_dag.my_group.nested_task"
+            ]
         }
     ]
 }
