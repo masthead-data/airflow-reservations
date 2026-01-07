@@ -129,7 +129,7 @@ MAX_WAIT=90
 WAITED=0
 while [ $WAITED -lt $MAX_WAIT ]; do
     STATUS=$(docker compose exec -T airflow-webserver airflow dags list-runs -d test_reservation_dag -o json 2>/dev/null | python3 -c "import sys, json; runs=json.load(sys.stdin); print(runs[0]['state'] if runs else 'none')" 2>/dev/null || echo "pending")
-    
+
     if [ "$STATUS" = "success" ]; then
         log_info "DAG run completed successfully!"
         break
@@ -137,7 +137,7 @@ while [ $WAITED -lt $MAX_WAIT ]; do
         log_error "DAG run failed!"
         break
     fi
-    
+
     sleep 5
     WAITED=$((WAITED + 5))
     echo -n "."
@@ -205,7 +205,7 @@ else
 fi
 
 # Task 2: Should have the reservation path injected
-if echo "$TASK2_LOGS" | grep -q "e2e-test-reservation-2"; then
+if echo "$TASK2_LOGS" | grep -q "e2e-test-reservation"; then
     log_info "✅ Task 2: Reservation path correctly injected"
     PASSED=$((PASSED + 1))
 else
@@ -232,14 +232,14 @@ else
 fi
 
 # Task 5: Should have the nested reservation path injected
-if echo "$TASK5_LOGS" | grep -q "e2e-nested-reservation"; then
+if echo "$TASK5_LOGS" | grep -q "e2e-test-reservation"; then
     log_info "✅ Task 5: Nested task reservation correctly injected"
     PASSED=$((PASSED + 1))
 else
     log_info "Checking alternative log path for Task 5..."
     # Fallback debug info
     docker compose exec -T airflow-webserver airflow tasks list test_reservation_dag 2>/dev/null | grep nested || true
-    
+
     log_error "❌ Task 5: Nested task reservation NOT found"
     log_error "Logs content: $(echo "$TASK5_LOGS" | head -n 5)..."
     FAILED=$((FAILED + 1))

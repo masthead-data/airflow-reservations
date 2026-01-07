@@ -198,7 +198,7 @@ def get_reservation(dag_id: str, task_id: str) -> str | None:
         Reservation ID string if found (including "none"), None otherwise.
 
     Example:
-        >>> from masthead_airflow_policy import get_reservation
+        >>> from airflow_reservations_policy import get_reservation
         >>> reservation = get_reservation("my_dag", "my_task")
         >>> if reservation is not None:
         ...     # Apply reservation (could be a path or "none")

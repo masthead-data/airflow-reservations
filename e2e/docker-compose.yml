@@ -1,7 +1,7 @@
-# E2E Test Environment for Masthead Airflow Policy
+# E2E Test Environment for Airflow Reservations Policy
 #
 # This docker-compose setup runs Airflow in standalone mode with the
-# masthead-airflow-policy plugin installed from local source.
+# airflow-reservations-policy plugin installed from local source.
 #
 # Usage:
 #   ./e2e/run_test.sh
@@ -54,7 +54,7 @@ services:
     command:
       - -c
       - |
-        echo "Installing masthead-airflow-policy from local source..."
+        echo "Installing airflow-reservations-policy from local source..."
         rm -rf /tmp/plugin && cp -r /opt/airflow/plugin_src /tmp/plugin
         pip install /tmp/plugin --no-deps
         echo "Initializing database..."
@@ -74,7 +74,7 @@ services:
   airflow-webserver:
     <<: *airflow-common
     command: >
-      bash -c "rm -rf /tmp/plugin && cp -r /opt/airflow/plugin_src /tmp/plugin && pip install /tmp/plugin --no-deps && airflow webserver"
+      bash -c "rm -rf /tmp/plugin && cp -r /opt/airflow/plugin_src /tmp/plugin && python -m pip install /tmp/plugin --no-deps && airflow webserver"
     ports:
       - "8080:8080"
     healthcheck:
@@ -91,7 +91,7 @@ services:
   airflow-scheduler:
     <<: *airflow-common
     command: >
-      bash -c "rm -rf /tmp/plugin && cp -r /opt/airflow/plugin_src /tmp/plugin && pip install /tmp/plugin --no-deps && airflow scheduler"
+      bash -c "rm -rf /tmp/plugin && cp -r /opt/airflow/plugin_src /tmp/plugin && python -m pip install /tmp/plugin --no-deps && airflow scheduler"
     healthcheck:
       test: [ "CMD-SHELL", 'airflow jobs check --job-type SchedulerJob --hostname "$${HOSTNAME}"' ]
       interval: 10s
@@ -106,7 +106,7 @@ services:
   airflow-triggerer:
     <<: *airflow-common
     command: >
-      bash -c "rm -rf /tmp/plugin && cp -r /opt/airflow/plugin_src /tmp/plugin && pip install /tmp/plugin --no-deps && airflow triggerer"
+      bash -c "rm -rf /tmp/plugin && cp -r /opt/airflow/plugin_src /tmp/plugin && python -m pip install /tmp/plugin --no-deps && airflow triggerer"
     healthcheck:
       test: [ "CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"' ]
       interval: 10s

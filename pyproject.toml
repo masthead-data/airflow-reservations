@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "masthead-airflow-policy"
+name = "airflow-reservations-policy"
 version = "0.1.0"
 description = "Airflow Cluster Policy for BigQuery reservation management"
 readme = "README.md"
@@ -38,7 +38,7 @@ Homepage = "https://github.com/masthead-data/airflow-reservations"
 Repository = "https://github.com/masthead-data/airflow-reservations"
 
 [project.entry-points.'airflow.policy']
-masthead = "masthead_airflow_policy.policy"
+airflow_reservations = "airflow_reservations_policy.policy"
 
 [tool.setuptools.packages.find]
 where = ["src"]

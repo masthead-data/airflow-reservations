@@ -25,7 +25,7 @@ test:
 	pytest tests/ -v
 
 test-cov:
-	pytest tests/ --cov=masthead_airflow_policy --cov-report=term-missing
+	pytest tests/ --cov=airflow_reservations_policy --cov-report=term-missing
 
 lint:
 	black --check src/ tests/

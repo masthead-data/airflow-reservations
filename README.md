@@ -1,4 +1,4 @@
-# Masthead Airflow Policy
+# Airflow Reservations Policy
 
 Airflow Cluster Policy plugin for automatic BigQuery reservation management.
 
@@ -15,13 +15,13 @@ This package integrates with Airflow's [Cluster Policies](https://airflow.apache
 ## Installation
 
 ```bash
-pip install masthead-airflow-policy
+pip install airflow-reservations-policy
 ```
 
 Or add to your `requirements.txt`:
 
-```
-masthead-airflow-policy>=0.1.0
+```text
+airflow-reservations-policy>=0.1.0
 ```
 
 The policy is automatically registered via Airflow's plugin entrypoint system (requires Airflow 2.6+).
@@ -82,15 +82,12 @@ Create a `reservations_config.json` file in your DAGs folder:
 | `"none"`                          | Injects `SET @@reservation_id = 'none';` (explicitly use on-demand capacity) |
 | `null`                            | Skips the task entirely (no SQL modification)                                |
 
-
 ### Configuration Path
 
-By default, the config file is loaded from:
-```
-$AIRFLOW_HOME/dags/reservations_config.json
-```
+By default, the config file is loaded from `$AIRFLOW_HOME/dags/reservations_config.json`.
 
 Override the path using the `RESERVATIONS_CONFIG_PATH` environment variable:
+
 ```bash
 export RESERVATIONS_CONFIG_PATH=/custom/path/to/config.json
 ```
@@ -110,7 +107,6 @@ For tasks inside TaskGroups, use the full task ID path as it appears in Airflow:
   ]
 }
 ```
-
 
 ## How It Works
 
@@ -133,21 +129,21 @@ flowchart LR
 For custom BigQuery API calls in `PythonOperator`, use the provided API:
 
 ```python
-from masthead_airflow_policy import get_reservation
+from airflow_reservations_policy import get_reservation
 
 def my_bigquery_task(**context):
     dag_id = context['dag'].dag_id
     task_id = context['task'].task_id
-    
+
     # Look up reservation for this task
     reservation = get_reservation(dag_id, task_id)
-    
+
     if reservation:
         # Prepend to your SQL
         sql = f"SET @@reservation_id = '{reservation}';\n{your_sql}"
     else:
         sql = your_sql
-    
+
     # Execute with BigQuery client...
 ```
 
@@ -158,7 +154,7 @@ def my_bigquery_task(**context):
 Look up the reservation ID for a specific task.
 
 ```python
-from masthead_airflow_policy import get_reservation
+from airflow_reservations_policy import get_reservation
 
 reservation = get_reservation("my_dag", "my_task")
 # Returns: "projects/my-project/locations/US/reservations/my-res" or None
@@ -169,7 +165,7 @@ reservation = get_reservation("my_dag", "my_task")
 Load the full configuration dictionary.
 
 ```python
-from masthead_airflow_policy import load_config
+from airflow_reservations_policy import load_config
 
 config = load_config()
 # Returns: {"reservations": {...}}
@@ -180,6 +176,7 @@ config = load_config()
 Masthead generates the `reservations_config.json` file containing the optimal reservation assignments for your tasks. Users are responsible for pulling this configuration into their Airflow environment.
 
 Typical workflow:
+
 1. Masthead analyzes your BigQuery workloads
 2. Masthead generates `reservations_config.json` with optimal assignments
 3. You pull the config into your DAGs repository
@@ -191,19 +188,22 @@ Typical workflow:
 ### Config not loading
 
 Check that:
+
 1. The config file exists at the expected path
 2. The file contains valid JSON
 3. Airflow has read permissions
 
 Enable debug logging:
+
 ```python
 import logging
-logging.getLogger("masthead_airflow_policy").setLevel(logging.DEBUG)
+logging.getLogger("airflow_reservations_policy").setLevel(logging.DEBUG)
 ```
 
 ### Reservations not being applied
 
 Verify:
+
 1. The task type is `BigQueryInsertJobOperator` or `BigQueryExecuteQueryOperator`
 2. The `dag_id.task_id` key exactly matches the config
 3. For TaskGroups, include the full path (e.g., `dag.group.task`)
@@ -218,12 +218,8 @@ pip install -e ".[dev]"
 pytest tests/ -v
 
 # Run with coverage
-pytest tests/ --cov=masthead_airflow_policy
+pytest tests/ --cov=airflow_reservations_policy
 
 # Run E2E tests (requires Docker)
 ./e2e/run_test.sh
 ```
-
-## License
-
-Apache 2.0

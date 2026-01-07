@@ -1,6 +1,6 @@
 # E2E Test Environment
 
-This directory contains an end-to-end test environment for the masthead-airflow-policy plugin.
+This directory contains an end-to-end test environment for the airflow-reservations-policy plugin.
 
 ## Quick Start
 
