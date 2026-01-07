@@ -34,15 +34,8 @@ Create a `reservations_config.json` file in your DAGs folder:
 {
   "reservation_config": [
     {
-      "tag": "critical-prod",
-      "reservation": "projects/my-project/locations/US/reservations/critical-prod",
-      "tasks": [
-        "marketing_dag.calculate_roas"
-      ]
-    },
-    {
       "tag": "standard",
-      "reservation": "projects/my-project/locations/US/reservations/standard",
+      "reservation": "projects/{project}/locations/{location}/reservations/{name}",
       "tasks": [
         "finance_dag.daily_report",
         "etl_dag.load_analytics"
@@ -56,10 +49,10 @@ Create a `reservations_config.json` file in your DAGs folder:
       ]
     },
     {
-      "tag": "skip",
+      "tag": "default",
       "reservation": null,
       "tasks": [
-        "legacy_dag.old_task"
+        "marketing_dag.calculate_roas"
       ]
     }
   ]
@@ -78,7 +71,7 @@ Create a `reservations_config.json` file in your DAGs folder:
 
 | Value                             | Behavior                                                                     |
 | --------------------------------- | ---------------------------------------------------------------------------- |
-| `"projects/.../reservations/..."` | Injects that reservation into the SQL                                        |
+| `"projects/.../locations/.../reservations/..."` | Injects that reservation into the SQL                                        |
 | `"none"`                          | Injects `SET @@reservation_id = 'none';` (explicitly use on-demand capacity) |
 | `null`                            | Skips the task entirely (no SQL modification)                                |
 
@@ -100,9 +93,11 @@ For tasks inside TaskGroups, use the full task ID path as it appears in Airflow:
 {
   "reservation_config": [
     {
-      "tag": "nested",
-      "reservation": "projects/p/locations/US/reservations/res",
-      "tasks": ["my_dag.my_task_group.inner_task"]
+      "tag": "standard",
+      "reservation": "projects/{project}/locations/{location}/reservations/{name}",
+      "tasks": [
+        "my_dag.my_task_group.inner_task"
+      ]
     }
   ]
 }
@@ -173,13 +168,13 @@ config = load_config()
 
 ## Generating Configuration
 
-Masthead generates the `reservations_config.json` file containing the optimal reservation assignments for your tasks. Users are responsible for pulling this configuration into their Airflow environment.
+Use Masthead recommendations to generate the `reservations_config.json` file containing the optimal reservation assignments for your tasks. Users are responsible for pulling this configuration into their Airflow environment.
 
 Typical workflow:
 
 1. Masthead analyzes your BigQuery workloads
-2. Masthead generates `reservations_config.json` with optimal assignments
-3. You pull the config into your DAGs repository
+2. Read Masthead recommendations and generate `reservations_config.json` with optimal assignments
+3. Merge the config into your DAGs repository
 4. Airflow syncs the updated config file
 5. The policy automatically applies reservations on next task parse
 
