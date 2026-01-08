@@ -37,25 +37,25 @@ format:
 	black src/ tests/
 
 e2e:
-	./e2e/run_test.sh
+	./tests/e2e/run_e2e_test.sh --version 2
 
 e2e-airflow2:
-	./e2e/run_test.sh
+	./tests/e2e/run_e2e_test.sh --version 2
 
 e2e-airflow3:
-	COMPOSE_FILE=docker-compose.airflow-3.yml ./e2e/run_test.sh
+	./tests/e2e/run_e2e_test.sh --version 3
 
 e2e-all:
 	@echo "Running E2E tests with Airflow 2.x..."
-	./e2e/run_test.sh
+	./tests/e2e/run_e2e_test.sh --version 2
 	@echo ""
 	@echo "Running E2E tests with Airflow 3.x..."
-	COMPOSE_FILE=docker-compose.airflow-3.yml ./e2e/run_test.sh
+	./tests/e2e/run_e2e_test.sh --version 3
 	@echo ""
 	@echo "✅ All E2E tests passed for both Airflow 2.x and 3.x!"
 
 e2e-keep:
-	./e2e/run_test.sh --keep
+	./tests/e2e/run_e2e_test.sh --version 2 --keep
 
 clean:
 	rm -rf build/ dist/ *.egg-info src/*.egg-info .pytest_cache .coverage

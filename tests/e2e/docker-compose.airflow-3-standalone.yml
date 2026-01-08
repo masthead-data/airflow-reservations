@@ -1,0 +1,59 @@
+# E2E Test Environment for Airflow Reservations Policy (Airflow 3.x Standalone)
+#
+# This runs Airflow 3.x in standalone mode (all-in-one container) to avoid
+# the Task SDK API communication issues with multi-container deployments.
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "airflow" ]
+      interval: 5s
+      retries: 5
+    restart: always
+
+  airflow-standalone:
+    image: apache/airflow:3.1.5-python3.12
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__FERNET_KEY: ''
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'false'
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL: '5'
+      AIRFLOW__LOGGING__LOGGING_LEVEL: 'INFO'
+      RESERVATIONS_CONFIG_PATH: '/opt/airflow/dags/reservations_config.json'
+      _AIRFLOW_DB_MIGRATE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: 'admin'
+      _AIRFLOW_WWW_USER_PASSWORD: 'admin'
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ../../:/opt/airflow/plugin_src:ro
+    ports:
+      - "8080:8080"
+    command: >
+      bash -c "
+        rm -rf /tmp/plugin && cp -rf /opt/airflow/plugin_src /tmp/plugin &&
+        pip install /tmp/plugin --no-deps &&
+        airflow standalone
+      "
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -s http://localhost:8080/api/v2/monitor/health | grep -q '\"status\":\"healthy\"' || exit 1" ]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: always
+
+volumes:
+  postgres-db-volume:

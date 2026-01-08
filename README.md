@@ -216,7 +216,7 @@ pytest tests/ -v
 pytest tests/ --cov=airflow_reservations_policy
 
 # Run E2E tests (requires Docker)
-./e2e/run_test.sh
+make e2e
 
 # Run E2E tests with Airflow 2.x
 make e2e-airflow2
@@ -236,39 +236,3 @@ This package is tested and compatible with:
 - **Python 3.8+** (tested with 3.11 and 3.12)
 
 The plugin uses Airflow's standard [Cluster Policies](https://airflow.apache.org/docs/apache-airflow/stable/administration-and-deployment/cluster-policies.html) API, which is stable across these versions.
-
-### Airflow 3.x Status
-
-Airflow 3.x introduces significant architectural changes, particularly the new Task SDK and API-based task execution model.
-
-**What Works:**
-- ✅ Plugin installation and registration
-- ✅ Policy hook execution (task_policy called correctly)
-- ✅ Reservation injection logic
-- ✅ Configuration loading and validation
-- ✅ DAG parsing with deprecation warnings (uses old import paths)
-
-**Known Issues:**
-- ❌ Task execution fails with Task SDK API communication errors
-- ❌ E2E tests do not complete (tasks stay in queued state or fail)
-- ⚠️ Import deprecation warnings: `airflow.models.baseoperator.BaseOperator` and `airflow.utils.task_group.TaskGroup` are deprecated in favor of SDK equivalents
-
-**Root Cause:**
-Airflow 3.x's Task SDK requires tasks to communicate with the API server during execution. This adds complexity to the deployment setup that goes beyond the plugin itself. The configuration requires:
-- Properly configured `AIRFLOW__CORE__INTERNAL_API_URL`
-- Network accessibility between task execution environment and API server
-- Correct authentication setup for internal API calls
-
-**Recommendation:**
-For production use, we recommend Airflow 2.10.x which has been thoroughly tested. Airflow 3.x support will be improved as the new architecture stabilizes and best practices emerge.
-- Command changes: `airflow webserver` → `airflow api-server`
-- Health endpoint: `/health` → `/api/v2/monitor/health`
-- API configuration may require `AIRFLOW__API__ENDPOINT_URL` setting
-- Import paths have deprecation warnings (functionality still works)
-
-**Testing Status:**
-- Unit tests: ✅ Pass (28/28)
-- E2E tests (Airflow 2.x): ✅ Pass (5/5)
-- E2E tests (Airflow 3.x): ⚠️ In progress
-
-For production deployments with Airflow 3.x, please conduct thorough testing in your specific environment first.
