@@ -5,10 +5,33 @@ This directory contains an end-to-end test environment for the airflow-reservati
 ## Quick Start
 
 ```bash
+# Test with Airflow 2.x (default)
 ./e2e/run_test.sh
+
+# Test with Airflow 3.x
+COMPOSE_FILE=docker-compose.airflow-3.yml ./e2e/run_test.sh
+
+# Or use Makefile targets
+make e2e-airflow2  # Test with Airflow 2.x
+make e2e-airflow3  # Test with Airflow 3.x
+make e2e-all       # Test with all supported versions
 ```
 
 This single command will:
+1. Start Airflow in Docker with the plugin installed from local source
+2. Wait for Airflow to be healthy
+3. Trigger the test DAG
+4. Verify reservation injection in task logs
+5. Clean up containers
+
+## Supported Versions
+
+The e2e tests run against multiple Airflow versions to ensure compatibility:
+
+| Compose File | Airflow Version | Python Version | Status |
+|--------------|-----------------|----------------|--------|
+| `docker-compose.yml` (default) | 2.10.4 | 3.11 | ✅ Tested |
+| `docker-compose.airflow-3.yml` | 3.1.5 | 3.12 | ✅ Tested |
 1. Start Airflow in Docker with the plugin installed from local source
 2. Wait for Airflow to be healthy
 3. Trigger the test DAG

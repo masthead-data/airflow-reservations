@@ -1,17 +1,20 @@
-.PHONY: install install-dev test test-cov lint format e2e clean help setup
+.PHONY: install install-dev test test-cov lint format e2e e2e-airflow2 e2e-airflow3 e2e-all clean help setup
 
 # Default target
 help:
 	@echo "Available targets:"
-	@echo "  setup        Install package with dev dependencies (for CI)"
-	@echo "  install      Install package"
-	@echo "  install-dev  Install package with dev dependencies"
-	@echo "  test         Run unit tests"
-	@echo "  test-cov     Run tests with coverage"
-	@echo "  lint         Run linting"
-	@echo "  format       Format code"
-	@echo "  e2e          Run E2E tests (requires Docker)"
-	@echo "  clean        Clean build artifacts"
+	@echo "  setup          Install package with dev dependencies (for CI)"
+	@echo "  install        Install package"
+	@echo "  install-dev    Install package with dev dependencies"
+	@echo "  test           Run unit tests"
+	@echo "  test-cov       Run tests with coverage"
+	@echo "  lint           Run linting"
+	@echo "  format         Format code"
+	@echo "  e2e            Run E2E tests with Airflow 2.x (default, requires Docker)"
+	@echo "  e2e-airflow2   Run E2E tests with Airflow 2.x (requires Docker)"
+	@echo "  e2e-airflow3   Run E2E tests with Airflow 3.x (requires Docker)"
+	@echo "  e2e-all        Run E2E tests with all Airflow versions (requires Docker)"
+	@echo "  clean          Clean build artifacts"
 
 setup: install-dev
 
@@ -35,6 +38,21 @@ format:
 
 e2e:
 	./e2e/run_test.sh
+
+e2e-airflow2:
+	./e2e/run_test.sh
+
+e2e-airflow3:
+	COMPOSE_FILE=docker-compose.airflow-3.yml ./e2e/run_test.sh
+
+e2e-all:
+	@echo "Running E2E tests with Airflow 2.x..."
+	./e2e/run_test.sh
+	@echo ""
+	@echo "Running E2E tests with Airflow 3.x..."
+	COMPOSE_FILE=docker-compose.airflow-3.yml ./e2e/run_test.sh
+	@echo ""
+	@echo "✅ All E2E tests passed for both Airflow 2.x and 3.x!"
 
 e2e-keep:
 	./e2e/run_test.sh --keep
