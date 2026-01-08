@@ -18,41 +18,38 @@ help:
 
 setup: install-dev
 
-install:
-	pip install -e .
+.venv:
+	python3 -m venv .venv
 
-install-dev:
-	pip install -e ".[dev]"
+install: .venv
+	.venv/bin/pip install -e .
+
+install-dev: .venv
+	.venv/bin/pip install -e ".[dev]"
 
 test:
-	pytest tests/ -v
+	.venv/bin/pytest tests/ -v
 
 test-cov:
-	pytest tests/ --cov=airflow_reservations_policy --cov-report=term-missing
+	.venv/bin/pytest tests/ --cov=airflow_reservations_policy --cov-report=term-missing
 
 lint:
-	black --check src/ tests/
+	.venv/bin/python -m black --check src/ tests/
 
 format:
-	black src/ tests/
+	.venv/bin/python -m black src/ tests/
 
-e2e:
-	./tests/e2e/run_e2e_test.sh --version 2
+e2e: e2e-airflow2 e2e-airflow3
+	@echo ""
+	@echo "✅ All E2E tests passed for both Airflow 2.x and 3.x!"
 
 e2e-airflow2:
+	@echo "Running E2E tests with Airflow 2.x..."
 	./tests/e2e/run_e2e_test.sh --version 2
 
 e2e-airflow3:
-	./tests/e2e/run_e2e_test.sh --version 3
-
-e2e-all:
-	@echo "Running E2E tests with Airflow 2.x..."
-	./tests/e2e/run_e2e_test.sh --version 2
-	@echo ""
 	@echo "Running E2E tests with Airflow 3.x..."
 	./tests/e2e/run_e2e_test.sh --version 3
-	@echo ""
-	@echo "✅ All E2E tests passed for both Airflow 2.x and 3.x!"
 
 e2e-keep:
 	./tests/e2e/run_e2e_test.sh --version 2 --keep
