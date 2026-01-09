@@ -122,13 +122,8 @@ fi
 
 # Create google_cloud_default connection
 log_info "Creating google_cloud_default connection..."
-if [ "$AIRFLOW_VERSION" = "3" ]; then
-    docker compose -f "$COMPOSE_FILE" exec "$SCHEDULER_CONTAINER" airflow connections add 'google_cloud_default' \
-        --conn-type 'google_cloud_platform' 2>/dev/null || true
-else
-    docker compose -f "$COMPOSE_FILE" exec "$SCHEDULER_CONTAINER" airflow connections create google_cloud_default \
-        --conn-type google_cloud_platform 2>/dev/null || true
-fi
+docker compose -f "$COMPOSE_FILE" exec "$SCHEDULER_CONTAINER" airflow connections add 'google_cloud_default' \
+    --conn-type 'google_cloud_platform' 2>/dev/null || true
 
 # Wait for DAG to be parsed
 if [ "$AIRFLOW_VERSION" = "3" ]; then

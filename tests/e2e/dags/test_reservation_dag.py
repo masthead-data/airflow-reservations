@@ -184,7 +184,6 @@ with DAG(
                 'BigQueryCheckOperator' AS operator_type
         )""",
         use_legacy_sql=False,
-        project_id="masthead-dev",
         location="US",
     )
 
