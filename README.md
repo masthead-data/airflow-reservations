@@ -6,9 +6,11 @@ This package integrates with Airflow's [Cluster Policies](https://airflow.apache
 
 ## Features
 
-- **Automatic Injection** - Intercepts `BigQueryInsertJobOperator` and `BigQueryExecuteQueryOperator` tasks
+- **Automatic re-assignment** - intercepts BigQuery operators and automatically re-assigns them to appropriate reservation based on the configuration:
+  - `BigQueryInsertJobOperator` - Injects into `configuration.query.query` dict
+  - Any BigQuery operator with a `sql` attribute (e.g. `BigQueryExecuteQueryOperator`, `BigQueryCheckOperator`)
 - **Lookup-based Configuration** - Uses `dag_id.task_id` → `reservation_id` mappings
-- **Python API** - Provides `get_reservation()` for custom BigQuery API calls in PythonOperators
+- **Python API** - Provides `get_reservation()` for custom BigQuery API calls in `PythonOperator`
 - **Performance Optimized** - Config caching with file mtime-based invalidation
 - **Graceful Error Handling** - Won't crash Airflow on config errors
 
@@ -69,11 +71,11 @@ Create a `reservations_config.json` file in your DAGs folder:
 
 **Reservation values:**
 
-| Value                             | Behavior                                                                     |
-| --------------------------------- | ---------------------------------------------------------------------------- |
-| `"projects/.../locations/.../reservations/..."` | Injects that reservation into the SQL                                        |
-| `"none"`                          | Injects `SET @@reservation='none';` (explicitly use on-demand capacity) |
-| `null`                            | Skips the task entirely (no SQL modification)                                |
+| Value                                           | Behavior                                                                |
+| ----------------------------------------------- | ----------------------------------------------------------------------- |
+| `"projects/.../locations/.../reservations/..."` | Injects that reservation into the SQL                                   |
+| `"none"`                                        | Injects `SET @@reservation='none';` (explicitly use on-demand capacity) |
+| `null`                                          | Skips the task entirely (no SQL modification)                           |
 
 ### Configuration Path
 
@@ -116,7 +118,7 @@ flowchart LR
     A[DAG Parsing] -->|Triggers| B[task_policy hook]
     B -->|Looks up| C[reservations_config.json]
     C -->|Returns reservation| B
-    B -->|Injects SQL| D[BigQuery Operator]
+    B -->|Re-assigns a query to a reservation| D[BigQuery Operator]
 ```
 
 ## Usage in Python Operators
