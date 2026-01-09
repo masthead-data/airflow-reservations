@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from airflow import DAG
 from airflow.models.baseoperator import BaseOperator
@@ -14,12 +14,16 @@ class MockBigQueryInsertJobOperator(BaseOperator):
     but just logs the configuration instead of executing.
     """
 
-    # This must match what the policy looks for
-    task_type = "BigQueryInsertJobOperator"
-
     def __init__(self, configuration: dict, **kwargs):
         super().__init__(**kwargs)
         self.configuration = configuration
+        # Set task_type after parent init to ensure it's properly set
+        self._task_type = "BigQueryInsertJobOperator"
+
+    @property
+    def task_type(self) -> str:
+        """Return the task type that the policy checks for."""
+        return "BigQueryInsertJobOperator"
 
     def execute(self, context: Context):
         query = self.configuration.get("query", {}).get("query", "")
@@ -48,11 +52,16 @@ class MockBigQueryExecuteQueryOperator(BaseOperator):
     Mock BigQueryExecuteQueryOperator for testing.
     """
 
-    task_type = "BigQueryExecuteQueryOperator"
-
     def __init__(self, sql: str, **kwargs):
         super().__init__(**kwargs)
         self.sql = sql
+        # Set task_type after parent init to ensure it's properly set
+        self._task_type = "BigQueryExecuteQueryOperator"
+
+    @property
+    def task_type(self) -> str:
+        """Return the task type that the policy checks for."""
+        return "BigQueryExecuteQueryOperator"
 
     def execute(self, context: Context):
         self.log.info("=" * 60)

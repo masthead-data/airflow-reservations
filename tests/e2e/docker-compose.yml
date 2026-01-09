@@ -78,7 +78,7 @@ services:
     <<: *airflow-common
     command: >
       bash -c "
-        rm -rf /tmp/plugin && cp -r /opt/airflow/plugin_src /tmp/plugin && 
+        rm -rf /tmp/plugin && cp -r /opt/airflow/plugin_src /tmp/plugin &&
         pip install --quiet --no-cache-dir /tmp/plugin &&
         airflow webserver
       "
@@ -99,7 +99,7 @@ services:
     <<: *airflow-common
     command: >
       bash -c "
-        rm -rf /tmp/plugin && cp -r /opt/airflow/plugin_src /tmp/plugin && 
+        rm -rf /tmp/plugin && cp -r /opt/airflow/plugin_src /tmp/plugin &&
         pip install --quiet --no-cache-dir /tmp/plugin &&
         airflow scheduler
       "
@@ -118,7 +118,7 @@ services:
     <<: *airflow-common
     command: >
       bash -c "
-        rm -rf /tmp/plugin && cp -r /opt/airflow/plugin_src /tmp/plugin && 
+        rm -rf /tmp/plugin && cp -r /opt/airflow/plugin_src /tmp/plugin &&
         pip install --quiet --no-cache-dir /tmp/plugin &&
         airflow triggerer
       "

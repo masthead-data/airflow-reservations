@@ -119,17 +119,27 @@ wait_for_dag_completion() {
                 return 0
             elif [ "$status" = "failed" ]; then
                 log_error "DAG run failed!"
-                
+
                 # Show task states for debugging
                 log_info "Fetching task states for debugging..."
+                local run_id=$(get_latest_run_id "$compose_file" "$container_name" "$dag_id" "$airflow_version")
                 if [ "$airflow_version" = "2" ]; then
                     docker compose -f "$compose_file" exec -T "$container_name" \
-                        airflow tasks states-for-dag-run "$dag_id" $(get_latest_run_id "$compose_file" "$container_name" "$dag_id" "$airflow_version") 2>/dev/null || true
+                        airflow tasks states-for-dag-run "$dag_id" "$run_id" 2>/dev/null || true
                 else
                     docker compose -f "$compose_file" exec -T "$container_name" \
-                        airflow tasks states-for-dag-run "$dag_id" $(get_latest_run_id "$compose_file" "$container_name" "$dag_id" "$airflow_version") 2>/dev/null || true
+                        airflow tasks states-for-dag-run "$dag_id" "$run_id" 2>/dev/null || true
                 fi
-                
+
+                # Show logs for failed tasks
+                log_info "Fetching logs for failed tasks..."
+                local log_path="/opt/airflow/logs/dag_id=${dag_id}/run_id=${run_id}"
+                docker compose -f "$compose_file" exec -T "$container_name" \
+                    find "$log_path" -name "*.log" -type f 2>/dev/null | while read log_file; do
+                        log_info "=== Log: $log_file ==="
+                        docker compose -f "$compose_file" exec -T "$container_name" cat "$log_file" 2>/dev/null || true
+                    done
+
                 return 1
             fi
         fi
