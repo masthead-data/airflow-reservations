@@ -58,6 +58,9 @@ wait_for_dag() {
 
     log_info "Waiting for DAG to be parsed..."
 
+    # Try to force DAG reserialization (works in Airflow 2.x, may help in 3.x)
+    docker compose -f "$compose_file" exec -T "$container_name" airflow dags reserialize >/dev/null 2>&1 || true
+
     while [ $waited -lt $max_wait ]; do
         if docker compose -f "$compose_file" exec -T "$container_name" airflow dags list 2>/dev/null | grep -q "$dag_id"; then
             log_info "DAG found!"
