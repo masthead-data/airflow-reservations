@@ -26,7 +26,12 @@ logger = logging.getLogger(__name__)
 BIGQUERY_OPERATOR_TYPES = frozenset(
     {
         "BigQueryInsertJobOperator",
-        "BigQueryExecuteQueryOperator",
+        "BigQueryExecuteQueryOperator",  # Deprecated in newer versions
+        "BigQueryCheckOperator",
+        "BigQueryValueCheckOperator",
+        "BigQueryIntervalCheckOperator",
+        "BigQueryColumnCheckOperator",
+        "BigQueryTableCheckOperator",
     }
 )
 
@@ -199,5 +204,6 @@ def task_policy(task: BaseOperator) -> None:
     # Try injection methods based on operator type
     if task.task_type == "BigQueryInsertJobOperator":
         _inject_reservation_into_configuration(task, reservation_id)
-    elif task.task_type == "BigQueryExecuteQueryOperator":
+    else:
+        # All other BigQuery operators use sql attribute (ExecuteQueryOperator, Check operators, etc.)
         _inject_reservation_into_sql_attribute(task, reservation_id)

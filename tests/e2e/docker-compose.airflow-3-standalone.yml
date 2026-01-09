@@ -31,6 +31,7 @@ services:
       AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL: '5'
       AIRFLOW__LOGGING__LOGGING_LEVEL: 'INFO'
       RESERVATIONS_CONFIG_PATH: '/opt/airflow/dags/reservations_config.json'
+      GOOGLE_CLOUD_PROJECT: 'masthead-prod'
       _AIRFLOW_DB_MIGRATE: 'true'
       _AIRFLOW_WWW_USER_CREATE: 'true'
       _AIRFLOW_WWW_USER_USERNAME: 'admin'
@@ -39,12 +40,14 @@ services:
       - ./dags:/opt/airflow/dags
       - ./logs:/opt/airflow/logs
       - ../../:/opt/airflow/plugin_src:ro
+      - ~/.config/gcloud:/home/airflow/.config/gcloud:ro
     ports:
       - "8080:8080"
     command: >
       bash -c "
         rm -rf /tmp/plugin && cp -rf /opt/airflow/plugin_src /tmp/plugin &&
         pip install --quiet --no-cache-dir /tmp/plugin &&
+        pip install --quiet --no-cache-dir apache-airflow-providers-google &&
         airflow standalone
       "
     healthcheck:

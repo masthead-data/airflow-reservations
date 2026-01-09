@@ -2,11 +2,13 @@
     "reservation_config": [
         {
             "tag": "reservation",
-            "reservation": "projects/test-project/locations/US/reservations/e2e-test-reservation",
+            "reservation": "projects/masthead-prod/locations/US/reservations/e2e-test-reservation",
             "tasks": [
                 "test_reservation_dag.bq_insert_job_task",
                 "test_reservation_dag.bq_execute_query_task",
-                "test_reservation_dag.my_group.nested_task"
+                "test_reservation_dag.my_group.nested_task",
+                "test_reservation_dag.bq_check_task",
+                "test_reservation_dag.python_custom_bq_task"
             ]
         },
         {

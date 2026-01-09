@@ -219,26 +219,26 @@ verify_all_tasks() {
     log_info "Verifying reservation injection..."
     log_info "=========================================="
 
-    # Task 1: Should have reservation path
-    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_insert_job_task" "e2e-test-reservation" "true"; then
-        log_info "✅ Task 1: Reservation injected"
+    # Task 1: Should have reservation path in SQL
+    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_insert_job_task" "SET @@reservation_id = 'projects/masthead-prod/locations/US/reservations/e2e-test-reservation'" "true"; then
+        log_info "✅ Task 1: Reservation injected into BigQueryInsertJobOperator"
         passed=$((passed + 1))
     else
-        log_error "❌ Task 1: Reservation NOT found"
+        log_error "❌ Task 1: Reservation NOT found in BigQueryInsertJobOperator"
         failed=$((failed + 1))
     fi
 
-    # Task 2: Should have reservation path
-    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_execute_query_task" "e2e-test-reservation" "true"; then
-        log_info "✅ Task 2: Reservation injected"
+    # Task 2: Should have reservation path in SQL
+    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_execute_query_task" "SET @@reservation_id = 'projects/masthead-prod/locations/US/reservations/e2e-test-reservation'" "true"; then
+        log_info "✅ Task 2: Reservation injected into BigQueryExecuteQueryOperator"
         passed=$((passed + 1))
     else
-        log_error "❌ Task 2: Reservation NOT found"
+        log_error "❌ Task 2: Reservation NOT found in BigQueryExecuteQueryOperator"
         failed=$((failed + 1))
     fi
 
     # Task 3: Should have 'none' for on-demand
-    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_ondemand_task" "= 'none'" "true"; then
+    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_ondemand_task" "SET @@reservation_id = 'none'" "true"; then
         log_info "✅ Task 3: On-demand reservation ('none') injected"
         passed=$((passed + 1))
     else
@@ -256,7 +256,7 @@ verify_all_tasks() {
     fi
 
     # Task 5: Nested task should have reservation
-    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "my_group.nested_task" "e2e-test-reservation" "true"; then
+    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "my_group.nested_task" "SET @@reservation_id = 'projects/masthead-prod/locations/US/reservations/e2e-test-reservation'" "true"; then
         log_info "✅ Task 5: Nested task reservation injected"
         passed=$((passed + 1))
     else
@@ -264,8 +264,26 @@ verify_all_tasks() {
         failed=$((failed + 1))
     fi
 
+    # Task 6: BigQueryCheckOperator should have reservation
+    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_check_task" "SET @@reservation_id = 'projects/masthead-prod/locations/US/reservations/e2e-test-reservation'" "true"; then
+        log_info "✅ Task 6: BigQueryCheckOperator has reservation"
+        passed=$((passed + 1))
+    else
+        log_error "❌ Task 6: BigQueryCheckOperator reservation NOT found"
+        failed=$((failed + 1))
+    fi
+
+    # Task 7: Python custom BQ task should have reservation applied
+    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "python_custom_bq_task" "✅ SUCCESS: Reservation was applied in custom Python code!" "true"; then
+        log_info "✅ Task 7: Python custom BigQuery task has reservation"
+        passed=$((passed + 1))
+    else
+        log_error "❌ Task 7: Python custom BigQuery task reservation NOT found"
+        failed=$((failed + 1))
+    fi
+
     log_info "=========================================="
-    log_info "Test Results: ${passed} passed, ${failed} failed"
+    log_info "Test Results: ${passed}/7 passed, ${failed}/7 failed"
     log_info "=========================================="
 
     return $failed

@@ -22,6 +22,8 @@ x-airflow-common: &airflow-common
     AIRFLOW__LOGGING__LOGGING_LEVEL: 'INFO'
     # Point to our test config
     RESERVATIONS_CONFIG_PATH: '/opt/airflow/dags/reservations_config.json'
+    # Set GCP project
+    GOOGLE_CLOUD_PROJECT: 'masthead-prod'
     # Required for standalone mode
     _AIRFLOW_DB_MIGRATE: 'true'
     _AIRFLOW_WWW_USER_CREATE: 'true'
@@ -31,6 +33,7 @@ x-airflow-common: &airflow-common
     - ./dags:/opt/airflow/dags
     - ./logs:/opt/airflow/logs
     - ../../:/opt/airflow/plugin_src:ro
+    - ~/.config/gcloud:/home/airflow/.config/gcloud:ro
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on: &airflow-common-depends-on
     postgres:
@@ -60,6 +63,7 @@ services:
         echo "Installing airflow-reservations-policy from local source..."
         rm -rf /tmp/plugin && cp -r /opt/airflow/plugin_src /tmp/plugin
         pip install --quiet --no-cache-dir /tmp/plugin
+        pip install --quiet --no-cache-dir apache-airflow-providers-google
         echo "Initializing database..."
         airflow db migrate
         airflow users create \
@@ -79,8 +83,7 @@ services:
     command: >
       bash -c "
         rm -rf /tmp/plugin && cp -r /opt/airflow/plugin_src /tmp/plugin &&
-        pip install --quiet --no-cache-dir /tmp/plugin &&
-        airflow webserver
+        pip install --quiet --no-cache-dir /tmp/plugin &&        pip install --quiet --no-cache-dir apache-airflow-providers-google &&        airflow webserver
       "
     ports:
       - "8080:8080"
@@ -100,8 +103,7 @@ services:
     command: >
       bash -c "
         rm -rf /tmp/plugin && cp -r /opt/airflow/plugin_src /tmp/plugin &&
-        pip install --quiet --no-cache-dir /tmp/plugin &&
-        airflow scheduler
+        pip install --quiet --no-cache-dir /tmp/plugin &&        pip install --quiet --no-cache-dir apache-airflow-providers-google &&        airflow scheduler
       "
     healthcheck:
       test: [ "CMD-SHELL", 'airflow jobs check --job-type SchedulerJob --hostname "$${HOSTNAME}"' ]
@@ -119,8 +121,7 @@ services:
     command: >
       bash -c "
         rm -rf /tmp/plugin && cp -r /opt/airflow/plugin_src /tmp/plugin &&
-        pip install --quiet --no-cache-dir /tmp/plugin &&
-        airflow triggerer
+        pip install --quiet --no-cache-dir /tmp/plugin &&        pip install --quiet --no-cache-dir apache-airflow-providers-google &&        airflow triggerer
       "
     healthcheck:
       test: [ "CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"' ]
