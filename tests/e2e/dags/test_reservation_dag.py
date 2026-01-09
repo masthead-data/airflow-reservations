@@ -193,5 +193,5 @@ with DAG(
         python_callable=custom_python_bq_task,
     )
 
-    # Set dependencies
-    bq_insert_job >> bq_execute_query >> bq_ondemand >> bq_no_reservation >> tg >> bq_check >> python_custom_bq
+    # Set dependencies - run all tasks in parallel for faster e2e testing
+    [bq_insert_job, bq_execute_query, bq_ondemand, bq_no_reservation, tg, bq_check, python_custom_bq]
