@@ -107,6 +107,11 @@ fi
 log_info "Cleaning up existing containers..."
 docker compose -f "$COMPOSE_FILE" down -v --remove-orphans 2>/dev/null || true
 
+# Ensure logs directory exists with correct permissions
+log_info "Setting up logs directory..."
+mkdir -p "$SCRIPT_DIR/logs"
+chmod -R 777 "$SCRIPT_DIR/logs"
+
 # Check if GCP credentials are available
 log_info "Checking GCP credentials..."
 if [ ! -f "$HOME/.config/gcloud/application_default_credentials.json" ]; then
