@@ -22,20 +22,28 @@ log_error() {
 }
 
 # Wait for Airflow to be healthy
-# Args: $1 = compose_file, $2 = max_wait_seconds (optional, default 120)
+# Args: $1 = compose_file, $2 = max_wait_seconds (optional, default 120), $3 = airflow_version (optional)
 wait_for_airflow_health() {
     local compose_file="$1"
     local max_wait="${2:-120}"
+    local airflow_version="${3:-3}"
     local waited=0
 
     log_info "Waiting for Airflow to be ready..."
 
     while [ $waited -lt $max_wait ]; do
-        # Check health endpoints for both Airflow 2.x (/health) and 3.x (/api/v2/monitor/health)
-        if curl -s http://localhost:8080/health 2>/dev/null | grep -q '"status": "healthy"' || \
-           curl -s http://localhost:8080/api/v2/monitor/health 2>/dev/null | grep -q '"status":"healthy"'; then
-            log_info "Airflow is healthy!"
-            return 0
+        if [ "$airflow_version" = "2" ]; then
+            # For Airflow 2.x, check scheduler container health via docker compose
+            if docker compose -f "$compose_file" ps | grep -q "scheduler.*healthy"; then
+                log_info "Airflow is healthy!"
+                return 0
+            fi
+        else
+            # For Airflow 3.x standalone, check health endpoint
+            if curl -s http://localhost:8080/api/v2/monitor/health 2>/dev/null | grep -q '"status":"healthy"'; then
+                log_info "Airflow is healthy!"
+                return 0
+            fi
         fi
         sleep 2
         waited=$((waited + 2))

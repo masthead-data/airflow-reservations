@@ -55,5 +55,5 @@ e2e-keep:
 	./tests/e2e/run_e2e_test.sh --version 2 --keep
 
 clean:
-	rm -rf build/ dist/ *.egg-info src/*.egg-info .pytest_cache .coverage tests/e2e/logs
+	rm -rf build/ dist/ *.egg-info src/*.egg-info .pytest_cache .coverage tests/e2e/logs .venv/
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true

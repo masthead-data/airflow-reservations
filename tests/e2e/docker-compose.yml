@@ -60,7 +60,8 @@ services:
       - -c
       - |
         echo "Installing airflow-reservations-policy from local source..."
-        rm -rf /tmp/plugin && cp -r /opt/airflow/plugin_src /tmp/plugin
+        rm -rf /tmp/plugin && mkdir -p /tmp/plugin
+        rsync -a --exclude='.venv' --exclude='*.egg-info' --exclude='__pycache__' /opt/airflow/plugin_src/ /tmp/plugin/
         pip install --quiet --no-cache-dir /tmp/plugin
         pip install --quiet --no-cache-dir apache-airflow-providers-google
         echo "Initializing database..."
@@ -77,32 +78,15 @@ services:
       <<: *airflow-common-env
     user: "0:0"
 
-  airflow-webserver:
-    <<: *airflow-common
-    command: >
-      bash -c "
-        rm -rf /tmp/plugin && cp -r /opt/airflow/plugin_src /tmp/plugin &&
-        pip install --quiet --no-cache-dir /tmp/plugin &&        pip install --quiet --no-cache-dir apache-airflow-providers-google &&        airflow webserver
-      "
-    ports:
-      - "8080:8080"
-    healthcheck:
-      test: [ "CMD", "curl", "--fail", "http://localhost:8080/health" ]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-    depends_on:
-      <<: *airflow-common-depends-on
-      airflow-init:
-        condition: service_completed_successfully
-
   airflow-scheduler:
     <<: *airflow-common
     command: >
       bash -c "
-        rm -rf /tmp/plugin && cp -r /opt/airflow/plugin_src /tmp/plugin &&
-        pip install --quiet --no-cache-dir /tmp/plugin &&        pip install --quiet --no-cache-dir apache-airflow-providers-google &&        airflow scheduler
+        rm -rf /tmp/plugin && mkdir -p /tmp/plugin &&
+        rsync -a --exclude='.venv' --exclude='*.egg-info' --exclude='__pycache__' /opt/airflow/plugin_src/ /tmp/plugin/ &&
+        pip install --quiet --no-cache-dir /tmp/plugin &&
+        pip install --quiet --no-cache-dir apache-airflow-providers-google &&
+        airflow scheduler
       "
     healthcheck:
       test: [ "CMD-SHELL", 'airflow jobs check --job-type SchedulerJob --hostname "$${HOSTNAME}"' ]
@@ -119,8 +103,11 @@ services:
     <<: *airflow-common
     command: >
       bash -c "
-        rm -rf /tmp/plugin && cp -r /opt/airflow/plugin_src /tmp/plugin &&
-        pip install --quiet --no-cache-dir /tmp/plugin &&        pip install --quiet --no-cache-dir apache-airflow-providers-google &&        airflow triggerer
+        rm -rf /tmp/plugin && mkdir -p /tmp/plugin &&
+        rsync -a --exclude='.venv' --exclude='*.egg-info' --exclude='__pycache__' /opt/airflow/plugin_src/ /tmp/plugin/ &&
+        pip install --quiet --no-cache-dir /tmp/plugin &&
+        pip install --quiet --no-cache-dir apache-airflow-providers-google &&
+        airflow triggerer
       "
     healthcheck:
       test: [ "CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"' ]

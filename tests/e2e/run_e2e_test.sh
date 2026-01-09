@@ -60,7 +60,7 @@ done
 case $AIRFLOW_VERSION in
     2)
         COMPOSE_FILE="docker-compose.yml"
-        WEBSERVER_CONTAINER="airflow-webserver"
+        WEBSERVER_CONTAINER="airflow-scheduler"
         SCHEDULER_CONTAINER="airflow-scheduler"
         LOG_CONTAINER="airflow-scheduler"
         DESCRIPTION="Airflow 2.x (Multi-container)"
@@ -123,7 +123,7 @@ export AIRFLOW_UID=$(id -u)
 docker compose -f "$COMPOSE_FILE" up -d
 
 # Wait for Airflow to be healthy
-if ! wait_for_airflow_health "$COMPOSE_FILE" 120; then
+if ! wait_for_airflow_health "$COMPOSE_FILE" 120 "$AIRFLOW_VERSION"; then
     if [ "$SHOW_LOGS" = true ]; then
         docker compose -f "$COMPOSE_FILE" logs
     fi
