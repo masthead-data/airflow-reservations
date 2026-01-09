@@ -58,7 +58,7 @@ def _inject_reservation_into_configuration(
 ) -> bool:
     """Inject reservation into BigQueryInsertJobOperator configuration.
 
-    Modifies the task's configuration dict to prepend SET @@reservation_id
+    Modifies the task's configuration dict to prepend SET @@reservation
     to the SQL query.
 
     Args:
@@ -88,7 +88,7 @@ def _inject_reservation_into_configuration(
         return False
 
     # Check if reservation is already set (idempotency)
-    if "SET @@reservation_id" in original_sql:
+    if "SET @@reservation" in original_sql:
         logger.debug(
             "Task %s already has reservation set, skipping",
             task.task_id,
@@ -134,7 +134,7 @@ def _inject_reservation_into_sql_attribute(
 
     # Handle both string and list of strings
     if isinstance(original_sql, str):
-        if "SET @@reservation_id" in original_sql:
+        if "SET @@reservation" in original_sql:
             logger.debug(
                 "Task %s already has reservation set, skipping",
                 task.task_id,
@@ -150,7 +150,7 @@ def _inject_reservation_into_sql_attribute(
             return False
 
         first_sql = original_sql[0]
-        if "SET @@reservation_id" in str(first_sql):
+        if "SET @@reservation" in str(first_sql):
             logger.debug(
                 "Task %s already has reservation set, skipping",
                 task.task_id,

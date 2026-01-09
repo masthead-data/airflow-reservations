@@ -44,7 +44,7 @@ def custom_python_bq_task(**context):
         print(f"Reservation: {reservation}")
 
         # Demonstrate how to use it with BigQuery client
-        sql_with_reservation = f"""SET @@reservation_id = '{reservation}';
+        sql_with_reservation = f"""SET @@reservation='{reservation}';
 SELECT
     CURRENT_TIMESTAMP() AS timestamp,
     'test_reservation_dag' AS dag_name,
@@ -92,9 +92,8 @@ with DAG(
                     'BigQueryInsertJobOperator' AS operator_type""",
                 "useLegacySql": False,
             },
-            "dryRun": True,
         },
-        project_id="masthead-prod",
+        project_id="masthead-dev",
         location="US",
     )
 
@@ -112,9 +111,8 @@ with DAG(
             'BigQueryInsertJobOperator' AS operator_type""",
                 "useLegacySql": False,
             },
-            "dryRun": True,
         },
-        project_id="masthead-prod",
+        project_id="masthead-dev",
         location="US",
     )
 
@@ -131,9 +129,8 @@ with DAG(
                     'BigQueryInsertJobOperator' AS operator_type""",
                 "useLegacySql": False,
             },
-            "dryRun": True,
         },
-        project_id="masthead-prod",
+        project_id="masthead-dev",
         location="US",
     )
 
@@ -150,9 +147,8 @@ with DAG(
                     'BigQueryInsertJobOperator' AS operator_type""",
                 "useLegacySql": False,
             },
-            "dryRun": True,
         },
-        project_id="masthead-prod",
+        project_id="masthead-dev",
         location="US",
     )
 
@@ -170,9 +166,8 @@ with DAG(
                         'BigQueryInsertJobOperator' AS operator_type""",
                     "useLegacySql": False,
                 },
-                "dryRun": True,
             },
-            project_id="masthead-prod",
+            project_id="masthead-dev",
             location="US",
         )
 
@@ -189,7 +184,7 @@ with DAG(
                 'BigQueryCheckOperator' AS operator_type
         )""",
         use_legacy_sql=False,
-        project_id="masthead-prod",
+        project_id="masthead-dev",
         location="US",
     )
 

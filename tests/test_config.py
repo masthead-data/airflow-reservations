@@ -159,7 +159,7 @@ class TestGetReservation:
         ):
             result = config.get_reservation("dag_d", "ondemand_task")
 
-        # "none" should be returned as-is to inject SET @@reservation_id = 'none'
+        # "none" should be returned as-is to inject SET @@reservation='none'
         assert result == "none"
 
     def test_null_reservation_skips_task(self, temp_config_file):
@@ -220,14 +220,14 @@ class TestFormatReservationSql:
 
         assert (
             result
-            == "SET @@reservation_id = 'projects/my-project/locations/US/reservations/my-res';\n"
+            == "SET @@reservation='projects/my-project/locations/US/reservations/my-res';\n"
         )
 
     def test_format_none_reservation_sql(self):
         """Test formatting 'none' for on-demand capacity."""
         result = config.format_reservation_sql("none")
 
-        assert result == "SET @@reservation_id = 'none';\n"
+        assert result == "SET @@reservation='none';\n"
 
 
 class TestBuildReservationLookup:

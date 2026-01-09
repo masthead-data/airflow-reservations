@@ -31,7 +31,7 @@ services:
       AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL: '5'
       AIRFLOW__LOGGING__LOGGING_LEVEL: 'INFO'
       RESERVATIONS_CONFIG_PATH: '/opt/airflow/dags/reservations_config.json'
-      GOOGLE_CLOUD_PROJECT: 'masthead-prod'
+      GOOGLE_CLOUD_PROJECT: 'masthead-dev'
       _AIRFLOW_DB_MIGRATE: 'true'
       _AIRFLOW_WWW_USER_CREATE: 'true'
       _AIRFLOW_WWW_USER_USERNAME: 'admin'

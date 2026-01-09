@@ -2,7 +2,7 @@
     "reservation_config": [
         {
             "tag": "reservation",
-            "reservation": "projects/masthead-prod/locations/US/reservations/e2e-test-reservation",
+            "reservation": "projects/masthead-dev/locations/US/reservations/capacity-1",
             "tasks": [
                 "test_reservation_dag.bq_insert_job_task",
                 "test_reservation_dag.bq_execute_query_task",

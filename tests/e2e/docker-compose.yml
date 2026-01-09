@@ -23,7 +23,7 @@ x-airflow-common: &airflow-common
     # Point to our test config
     RESERVATIONS_CONFIG_PATH: '/opt/airflow/dags/reservations_config.json'
     # Set GCP project
-    GOOGLE_CLOUD_PROJECT: 'masthead-prod'
+    GOOGLE_CLOUD_PROJECT: 'masthead-dev'
     # Required for standalone mode
     _AIRFLOW_DB_MIGRATE: 'true'
     _AIRFLOW_WWW_USER_CREATE: 'true'

@@ -65,7 +65,7 @@ class TestTaskPolicy:
             policy.task_policy(task)
 
         expected_sql = (
-            "SET @@reservation_id = 'projects/p/locations/US/reservations/r';\n"
+            "SET @@reservation='projects/p/locations/US/reservations/r';\n"
             "SELECT * FROM table"
         )
         assert task.configuration["query"]["query"] == expected_sql
@@ -74,7 +74,7 @@ class TestTaskPolicy:
         """Test that existing reservation statements are not duplicated."""
         from airflow_reservations_policy import policy
 
-        original_sql = "SET @@reservation_id = 'existing';\nSELECT 1"
+        original_sql = "SET @@reservation='existing';\nSELECT 1"
         task = MockTask(
             task_id="my_task",
             task_type="BigQueryInsertJobOperator",
@@ -125,7 +125,7 @@ class TestTaskPolicy:
             policy.task_policy(task)
 
         expected_sql = (
-            "SET @@reservation_id = 'projects/p/locations/US/reservations/r';\n"
+            "SET @@reservation='projects/p/locations/US/reservations/r';\n"
             "SELECT * FROM table"
         )
         assert task.sql == expected_sql
@@ -149,7 +149,7 @@ class TestTaskPolicy:
             policy.task_policy(task)
 
         # First statement should have reservation prepended
-        assert task.sql[0].startswith("SET @@reservation_id")
+        assert task.sql[0].startswith("SET @@reservation")
         assert "SELECT 1" in task.sql[0]
         # Second statement unchanged
         assert task.sql[1] == "SELECT 2"

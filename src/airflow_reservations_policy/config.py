@@ -28,7 +28,7 @@ Config format:
 
 Reservation value semantics:
 - Full path (e.g., "projects/.../reservations/...") → Injects that reservation
-- "none" → Injects SET @@reservation_id = 'none'; (explicitly use on-demand capacity)
+- "none" → Injects SET @@reservation='none'; (explicitly use on-demand capacity)
 - null → Skips the task entirely (no SQL modification)
 
 Example usage in a PythonOperator:
@@ -41,7 +41,7 @@ Example usage in a PythonOperator:
 
         if reservation is not None:
             # Prepend to your SQL (includes "none" for on-demand)
-            sql = f"SET @@reservation_id = '{reservation}';\\n{your_sql}"
+            sql = f"SET @@reservation='{reservation}';\\n{your_sql}"
 """
 
 from __future__ import annotations
@@ -89,7 +89,7 @@ def _build_reservation_lookup(config: dict[str, Any]) -> dict[str, str | object]
 
     Semantics:
     - reservation = "projects/..." → Store the path (will be injected)
-    - reservation = "none" → Store "none" (will inject SET @@reservation_id = 'none')
+    - reservation = "none" → Store "none" (will inject SET @@reservation='none')
     - reservation = null → Do NOT add to lookup (task will be skipped)
 
     Args:
@@ -202,7 +202,7 @@ def get_reservation(dag_id: str, task_id: str) -> str | None:
         >>> reservation = get_reservation("my_dag", "my_task")
         >>> if reservation is not None:
         ...     # Apply reservation (could be a path or "none")
-        ...     sql = f"SET @@reservation_id = '{reservation}';\\n{sql}"
+        ...     sql = f"SET @@reservation='{reservation}';\\n{sql}"
     """
     # Ensure config is loaded
     load_config()
@@ -249,4 +249,4 @@ def format_reservation_sql(reservation_id: str) -> str:
     Returns:
         SQL SET statement for the reservation.
     """
-    return f"SET @@reservation_id = '{reservation_id}';\n"
+    return f"SET @@reservation='{reservation_id}';\n"

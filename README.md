@@ -72,7 +72,7 @@ Create a `reservations_config.json` file in your DAGs folder:
 | Value                             | Behavior                                                                     |
 | --------------------------------- | ---------------------------------------------------------------------------- |
 | `"projects/.../locations/.../reservations/..."` | Injects that reservation into the SQL                                        |
-| `"none"`                          | Injects `SET @@reservation_id = 'none';` (explicitly use on-demand capacity) |
+| `"none"`                          | Injects `SET @@reservation='none';` (explicitly use on-demand capacity) |
 | `null`                            | Skips the task entirely (no SQL modification)                                |
 
 ### Configuration Path
@@ -109,7 +109,7 @@ When Airflow parses your DAGs, this plugin's `task_policy` hook is called for ea
 
 1. Extracts `dag_id` and `task_id` from the task
 2. Looks up `dag_id.task_id` in the configuration file
-3. If found, prepends `SET @@reservation_id = '...';` to the SQL query
+3. If found, prepends `SET @@reservation='...';` to the SQL query
 
 ```mermaid
 flowchart LR
@@ -135,7 +135,7 @@ def my_bigquery_task(**context):
 
     if reservation:
         # Prepend to your SQL
-        sql = f"SET @@reservation_id = '{reservation}';\n{your_sql}"
+        sql = f"SET @@reservation='{reservation}';\n{your_sql}"
     else:
         sql = your_sql
 

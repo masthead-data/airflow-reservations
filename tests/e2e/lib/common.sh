@@ -220,7 +220,7 @@ verify_all_tasks() {
     log_info "=========================================="
 
     # Task 1: Should have reservation path in SQL
-    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_insert_job_task" "SET @@reservation_id = 'projects/masthead-prod/locations/US/reservations/e2e-test-reservation'" "true"; then
+    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_insert_job_task" "SET @@reservation='projects/masthead-dev/locations/US/reservations/capacity-1'" "true"; then
         log_info "✅ Task 1: Reservation injected into BigQueryInsertJobOperator"
         passed=$((passed + 1))
     else
@@ -229,7 +229,7 @@ verify_all_tasks() {
     fi
 
     # Task 2: Should have reservation path in SQL
-    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_execute_query_task" "SET @@reservation_id = 'projects/masthead-prod/locations/US/reservations/e2e-test-reservation'" "true"; then
+    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_execute_query_task" "SET @@reservation='projects/masthead-dev/locations/US/reservations/capacity-1'" "true"; then
         log_info "✅ Task 2: Reservation injected into BigQueryExecuteQueryOperator"
         passed=$((passed + 1))
     else
@@ -238,7 +238,7 @@ verify_all_tasks() {
     fi
 
     # Task 3: Should have 'none' for on-demand
-    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_ondemand_task" "SET @@reservation_id = 'none'" "true"; then
+    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_ondemand_task" "SET @@reservation='none'" "true"; then
         log_info "✅ Task 3: On-demand reservation ('none') injected"
         passed=$((passed + 1))
     else
@@ -247,7 +247,7 @@ verify_all_tasks() {
     fi
 
     # Task 4: Should NOT have reservation (not in config)
-    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_no_reservation_task" "SET @@reservation_id" "false"; then
+    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_no_reservation_task" "SET @@reservation" "false"; then
         log_info "✅ Task 4: Correctly has no reservation"
         passed=$((passed + 1))
     else
@@ -256,7 +256,7 @@ verify_all_tasks() {
     fi
 
     # Task 5: Nested task should have reservation
-    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "my_group.nested_task" "SET @@reservation_id = 'projects/masthead-prod/locations/US/reservations/e2e-test-reservation'" "true"; then
+    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "my_group.nested_task" "SET @@reservation='projects/masthead-dev/locations/US/reservations/capacity-1'" "true"; then
         log_info "✅ Task 5: Nested task reservation injected"
         passed=$((passed + 1))
     else
@@ -265,7 +265,7 @@ verify_all_tasks() {
     fi
 
     # Task 6: BigQueryCheckOperator should have reservation
-    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_check_task" "SET @@reservation_id = 'projects/masthead-prod/locations/US/reservations/e2e-test-reservation'" "true"; then
+    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_check_task" "SET @@reservation='projects/masthead-dev/locations/US/reservations/capacity-1'" "true"; then
         log_info "✅ Task 6: BigQueryCheckOperator has reservation"
         passed=$((passed + 1))
     else
