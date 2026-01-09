@@ -107,6 +107,16 @@ fi
 log_info "Cleaning up existing containers..."
 docker compose -f "$COMPOSE_FILE" down -v --remove-orphans 2>/dev/null || true
 
+# Check if GCP credentials are available
+log_info "Checking GCP credentials..."
+if [ ! -f "$HOME/.config/gcloud/application_default_credentials.json" ]; then
+    log_warn "GCP credentials not found at $HOME/.config/gcloud/application_default_credentials.json"
+    log_warn "Tests may fail if BigQuery cannot authenticate"
+    log_warn "Run: gcloud auth application-default login"
+else
+    log_info "GCP credentials found"
+fi
+
 # Start services
 log_info "Starting Airflow services..."
 export AIRFLOW_UID=$(id -u)
@@ -118,6 +128,15 @@ if ! wait_for_airflow_health "$COMPOSE_FILE" 120; then
         docker compose -f "$COMPOSE_FILE" logs
     fi
     exit 1
+fi
+
+# Verify credentials are accessible inside container
+log_info "Verifying GCP credentials inside container..."
+if docker compose -f "$COMPOSE_FILE" exec -T "$SCHEDULER_CONTAINER" test -f /home/airflow/.config/gcloud/application_default_credentials.json; then
+    log_info "✓ Credentials accessible in container"
+else
+    log_error "✗ Credentials NOT accessible in container"
+    log_error "Check volume mount: ~/.config/gcloud:/home/airflow/.config/gcloud:ro"
 fi
 
 # Create google_cloud_default connection
