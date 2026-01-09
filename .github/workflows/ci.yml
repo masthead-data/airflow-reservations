@@ -51,6 +51,11 @@ jobs:
           workload_identity_provider: 'projects/431544431936/locations/global/workloadIdentityPools/github/providers/github-ci'
           service_account: 'github-ci-deployer@masthead-prod.iam.gserviceaccount.com'
           create_credentials_file: true
+      - name: Set up GCP credentials for Docker
+        run: |
+          # Create gcloud config directory and copy credentials
+          mkdir -p $HOME/.config/gcloud
+          cp ${{ steps.auth.outputs.credentials_file_path }} $HOME/.config/gcloud/application_default_credentials.json
       - name: Run E2E tests (Airflow ${{ matrix.airflow-version }}.x)
         run: |
           ./tests/e2e/run_e2e_test.sh --version ${{ matrix.airflow-version }}
