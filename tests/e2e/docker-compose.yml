@@ -126,7 +126,7 @@ services:
       test: [ "CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"' ]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
       start_period: 30s
     depends_on:
       <<: *airflow-common-depends-on
