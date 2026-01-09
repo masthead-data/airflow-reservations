@@ -141,11 +141,24 @@ wait_for_dag_completion() {
                 # Show logs for failed tasks
                 log_info "Fetching logs for failed tasks..."
                 local log_path="/opt/airflow/logs/dag_id=${dag_id}/run_id=${run_id}"
-                docker compose -f "$compose_file" exec -T "$container_name" \
-                    find "$log_path" -name "*.log" -type f 2>/dev/null | while read log_file; do
-                        log_info "=== Log: $log_file ==="
-                        docker compose -f "$compose_file" exec -T "$container_name" cat "$log_file" 2>/dev/null || true
-                    done
+
+                # First, check if log directory exists
+                if ! docker compose -f "$compose_file" exec -T "$container_name" test -d "$log_path" 2>/dev/null; then
+                    log_error "Log directory not found: $log_path"
+                    log_info "Tasks failed during initialization (no start_date). Checking scheduler logs..."
+                    # Show last 100 lines and filter for relevant errors
+                    docker compose -f "$compose_file" logs --tail=100 2>&1 | grep -B 5 -A 10 -E "(ERROR|Exception|Traceback|Failed)" | tail -80
+                else
+                    # Try to show at least the first failed task's log
+                    local first_log=$(docker compose -f "$compose_file" exec -T "$container_name" \
+                        find "$log_path" -name "*.log" -type f 2>/dev/null | head -1)
+                    if [ -n "$first_log" ]; then
+                        log_info "=== Sample failed task log: $first_log ==="
+                        docker compose -f "$compose_file" exec -T "$container_name" cat "$first_log" 2>/dev/null | tail -50
+                    else
+                        log_error "No log files found in $log_path"
+                    fi
+                fi
 
                 return 1
             fi
