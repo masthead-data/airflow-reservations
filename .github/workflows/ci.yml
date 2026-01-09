@@ -26,9 +26,12 @@ jobs:
           make test
 
   e2e:
-    if: github.ref == 'refs/heads/main'
+    # Run on main branch/tag pushes and PRs from the same repo (includes Dependabot)
+    # Skip for PRs from forks due to workload identity security restrictions
+    if: (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))) || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     permissions:
+      id-token: write
       contents: read
     strategy:
       matrix:
@@ -42,6 +45,12 @@ jobs:
       - name: Install dependencies
         run: |
           make setup
+      - id: auth
+        uses: 'google-github-actions/auth@v3'
+        with:
+          workload_identity_provider: 'projects/431544431936/locations/global/workloadIdentityPools/github/providers/github-ci'
+          service_account: 'github-ci-deployer@masthead-prod.iam.gserviceaccount.com'
+          create_credentials_file: true
       - name: Run E2E tests (Airflow ${{ matrix.airflow-version }}.x)
         run: |
           ./tests/e2e/run_e2e_test.sh --version ${{ matrix.airflow-version }}
