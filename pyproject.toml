@@ -46,3 +46,5 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+# Exclude e2e DAG files from collection
+norecursedirs = ["tests/e2e/dags"]

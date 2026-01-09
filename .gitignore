@@ -4,3 +4,4 @@ src/airflow_reservations_policy/__pycache__/
 tests/e2e/logs/
 tests/e2e/dags/__pycache__/
 src/airflow_reservations_policy.egg-info/
+.coverage
