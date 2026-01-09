@@ -2,8 +2,6 @@
 
 from unittest import mock
 
-import pytest
-
 
 class MockTask:
     """Mock Airflow task for testing."""

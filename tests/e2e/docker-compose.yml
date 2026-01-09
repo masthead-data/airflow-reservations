@@ -59,7 +59,7 @@ services:
       - |
         echo "Installing airflow-reservations-policy from local source..."
         rm -rf /tmp/plugin && cp -r /opt/airflow/plugin_src /tmp/plugin
-        pip install /tmp/plugin --no-deps
+        pip install --quiet --no-cache-dir /tmp/plugin
         echo "Initializing database..."
         airflow db migrate
         airflow users create \
@@ -77,7 +77,11 @@ services:
   airflow-webserver:
     <<: *airflow-common
     command: >
-      bash -c "rm -rf /tmp/plugin && cp -r /opt/airflow/plugin_src /tmp/plugin && python -m pip install /tmp/plugin --no-deps && airflow webserver"
+      bash -c "
+        rm -rf /tmp/plugin && cp -r /opt/airflow/plugin_src /tmp/plugin && 
+        pip install --quiet --no-cache-dir /tmp/plugin &&
+        airflow webserver
+      "
     ports:
       - "8080:8080"
     healthcheck:
@@ -94,7 +98,11 @@ services:
   airflow-scheduler:
     <<: *airflow-common
     command: >
-      bash -c "rm -rf /tmp/plugin && cp -r /opt/airflow/plugin_src /tmp/plugin && python -m pip install /tmp/plugin --no-deps && airflow scheduler"
+      bash -c "
+        rm -rf /tmp/plugin && cp -r /opt/airflow/plugin_src /tmp/plugin && 
+        pip install --quiet --no-cache-dir /tmp/plugin &&
+        airflow scheduler
+      "
     healthcheck:
       test: [ "CMD-SHELL", 'airflow jobs check --job-type SchedulerJob --hostname "$${HOSTNAME}"' ]
       interval: 10s
@@ -109,7 +117,11 @@ services:
   airflow-triggerer:
     <<: *airflow-common
     command: >
-      bash -c "rm -rf /tmp/plugin && cp -r /opt/airflow/plugin_src /tmp/plugin && python -m pip install /tmp/plugin --no-deps && airflow triggerer"
+      bash -c "
+        rm -rf /tmp/plugin && cp -r /opt/airflow/plugin_src /tmp/plugin && 
+        pip install --quiet --no-cache-dir /tmp/plugin &&
+        airflow triggerer
+      "
     healthcheck:
       test: [ "CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"' ]
       interval: 10s

@@ -44,7 +44,7 @@ services:
     command: >
       bash -c "
         rm -rf /tmp/plugin && cp -rf /opt/airflow/plugin_src /tmp/plugin &&
-        pip install /tmp/plugin --no-deps &&
+        pip install --quiet --no-cache-dir /tmp/plugin &&
         airflow standalone
       "
     healthcheck:

@@ -119,6 +119,17 @@ wait_for_dag_completion() {
                 return 0
             elif [ "$status" = "failed" ]; then
                 log_error "DAG run failed!"
+                
+                # Show task states for debugging
+                log_info "Fetching task states for debugging..."
+                if [ "$airflow_version" = "2" ]; then
+                    docker compose -f "$compose_file" exec -T "$container_name" \
+                        airflow tasks states-for-dag-run "$dag_id" $(get_latest_run_id "$compose_file" "$container_name" "$dag_id" "$airflow_version") 2>/dev/null || true
+                else
+                    docker compose -f "$compose_file" exec -T "$container_name" \
+                        airflow tasks states-for-dag-run "$dag_id" $(get_latest_run_id "$compose_file" "$container_name" "$dag_id" "$airflow_version") 2>/dev/null || true
+                fi
+                
                 return 1
             fi
         fi
