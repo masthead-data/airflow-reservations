@@ -37,8 +37,8 @@ wait_for_airflow_health() {
             log_info "Airflow is healthy!"
             return 0
         fi
-        sleep 3
-        waited=$((waited + 3))
+        sleep 2
+        waited=$((waited + 2))
         echo -n "."
     done
     echo ""
@@ -58,17 +58,13 @@ wait_for_dag() {
 
     log_info "Waiting for DAG to be parsed..."
 
-    # Try to force DAG reserialization (works in Airflow 2.x, may help in 3.x)
-    docker compose -f "$compose_file" exec -T "$container_name" airflow dags reserialize >/dev/null 2>&1 || true
-    sleep 2
-
     while [ $waited -lt $max_wait ]; do
         if docker compose -f "$compose_file" exec -T "$container_name" airflow dags list 2>/dev/null | grep -q "$dag_id"; then
             log_info "DAG found!"
             return 0
         fi
-        sleep 3
-        waited=$((waited + 3))
+        sleep 2
+        waited=$((waited + 2))
         echo -n "."
     done
     echo ""
@@ -144,8 +140,8 @@ wait_for_dag_completion() {
             fi
         fi
 
-        sleep 3
-        waited=$((waited + 3))
+        sleep 2
+        waited=$((waited + 2))
         echo -n "."
     done
     echo ""

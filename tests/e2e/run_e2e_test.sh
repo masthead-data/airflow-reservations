@@ -126,12 +126,6 @@ docker compose -f "$COMPOSE_FILE" exec "$SCHEDULER_CONTAINER" airflow connection
     --conn-type 'google_cloud_platform' 2>/dev/null || true
 
 # Wait for DAG to be parsed
-if [ "$AIRFLOW_VERSION" = "3" ]; then
-    # Airflow 3.x needs more time for initial parsing
-    log_info "Waiting for initial DAG parsing..."
-    sleep 10
-fi
-
 if ! wait_for_dag "$COMPOSE_FILE" "$SCHEDULER_CONTAINER" "$DAG_ID" 60; then
     if [ "$SHOW_LOGS" = true ]; then
         docker compose -f "$COMPOSE_FILE" logs

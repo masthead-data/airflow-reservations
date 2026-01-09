@@ -52,11 +52,10 @@ services:
       "
     healthcheck:
       test: [ "CMD-SHELL", "curl -s http://localhost:8080/api/v2/monitor/health | grep -q '\"status\":\"healthy\"' || exit 1" ]
-      interval: 10s
-      timeout: 10s
+      interval: 5s
+      timeout: 5s
       retries: 5
       start_period: 60s
-    restart: always
 
 volumes:
   postgres-db-volume:

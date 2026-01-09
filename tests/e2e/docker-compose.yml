@@ -52,7 +52,6 @@ services:
       test: [ "CMD", "pg_isready", "-U", "airflow" ]
       interval: 5s
       retries: 5
-    restart: always
 
   airflow-init:
     <<: *airflow-common
@@ -89,10 +88,10 @@ services:
       - "8080:8080"
     healthcheck:
       test: [ "CMD", "curl", "--fail", "http://localhost:8080/health" ]
-      interval: 10s
-      timeout: 10s
+      interval: 5s
+      timeout: 5s
       retries: 5
-    restart: always
+      start_period: 30s
     depends_on:
       <<: *airflow-common-depends-on
       airflow-init:
@@ -107,10 +106,10 @@ services:
       "
     healthcheck:
       test: [ "CMD-SHELL", 'airflow jobs check --job-type SchedulerJob --hostname "$${HOSTNAME}"' ]
-      interval: 10s
-      timeout: 10s
+      interval: 5s
+      timeout: 5s
       retries: 5
-    restart: always
+      start_period: 30s
     depends_on:
       <<: *airflow-common-depends-on
       airflow-init:
@@ -125,10 +124,10 @@ services:
       "
     healthcheck:
       test: [ "CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"' ]
-      interval: 10s
-      timeout: 10s
+      interval: 5s
+      timeout: 5s
       retries: 5
-    restart: always
+      start_period: 30s
     depends_on:
       <<: *airflow-common-depends-on
       airflow-init:
