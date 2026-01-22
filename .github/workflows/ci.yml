@@ -53,9 +53,15 @@ jobs:
           create_credentials_file: true
       - name: Set up GCP credentials for Docker
         run: |
-          # Create gcloud config directory and copy credentials
+          # Create gcloud config directory
           mkdir -p $HOME/.config/gcloud
-          cp ${{ steps.auth.outputs.credentials_file_path }} $HOME/.config/gcloud/application_default_credentials.json
+          # Move credentials instead of copying to remove them from the workspace
+          # This avoids "Permission denied" errors when Docker tries to copy the workspace
+          mv ${{ steps.auth.outputs.credentials_file_path }} $HOME/.config/gcloud/application_default_credentials.json
+          # Ensure credentials are readable by the Docker container's user (uid 50000)
+          chmod 644 $HOME/.config/gcloud/application_default_credentials.json
+          # Fix permissions for the workspace so Docker user can read source code
+          chmod -R a+rX .
       - name: Run E2E tests (Airflow ${{ matrix.airflow-version }}.x)
         run: |
           ./tests/e2e/run_e2e_test.sh --version ${{ matrix.airflow-version }}

@@ -44,7 +44,13 @@ services:
       - "8080:8080"
     command: >
       bash -c "
-        rm -rf /tmp/plugin && cp -rf /opt/airflow/plugin_src /tmp/plugin &&
+        echo 'Installing airflow-reservations-policy from local source...' &&
+        rm -rf /tmp/plugin && mkdir -p /tmp/plugin &&
+        if command -v rsync >/dev/null 2>&1; then
+          rsync -a --exclude='.venv' --exclude='.git' --exclude='*.egg-info' --exclude='__pycache__' /opt/airflow/plugin_src/ /tmp/plugin/
+        else
+          cp -rf /opt/airflow/plugin_src/. /tmp/plugin/
+        fi &&
         pip install --quiet --no-cache-dir /tmp/plugin &&
         pip install --quiet --no-cache-dir apache-airflow-providers-google &&
         airflow standalone
