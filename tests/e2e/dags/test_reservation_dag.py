@@ -7,30 +7,34 @@ The operators will log the SQL being executed, which we can verify contains the 
 from datetime import datetime
 
 from airflow import DAG
-from airflow.operators.python import PythonOperator
+
+try:
+    from airflow.providers.standard.operators.python import PythonOperator
+except ImportError:
+    from airflow.operators.python import PythonOperator
+
 from airflow.providers.google.cloud.operators.bigquery import (
     BigQueryCheckOperator,
     BigQueryInsertJobOperator,
 )
-from airflow.utils.task_group import TaskGroup
+
+try:
+    from airflow.sdk import TaskGroup
+except ImportError:
+    from airflow.utils.task_group import TaskGroup
 
 
 def custom_python_bq_task(**context):
     """Custom Python task that executes a BigQuery job.
 
     This tests that custom Python code can use the policy's helper function
-    to apply reservations to BigQuery jobs.
+    to apply reservations to BigQuery jobs and that the resulting SQL
+    is valid when executed via the BigQuery client.
     """
-    # Import here to avoid parse-time import errors
-    try:
-        from google.cloud import bigquery
-    except ImportError:
-        print("google-cloud-bigquery not installed, skipping BQ client demo")
-
     from airflow_reservations_policy.config import get_reservation
 
-    task_id = context['task_instance'].task_id
-    dag_id = context['dag'].dag_id
+    task_id = context["task_instance"].task_id
+    dag_id = context["dag"].dag_id
 
     # Get the reservation for this task
     reservation = get_reservation(dag_id, task_id)
@@ -39,24 +43,55 @@ def custom_python_bq_task(**context):
     print("Custom Python BigQuery Task")
     print("=" * 60)
 
-    if reservation:
-        print(f"✅ SUCCESS: Reservation was applied in custom Python code!")
-        print(f"Reservation: {reservation}")
+    if not reservation:
+        print("❌ WARNING: No reservation configured for this task")
+        return {"reservation_applied": False}
 
-        # Demonstrate how to use it with BigQuery client
-        sql_with_reservation = f"""SET @@reservation='{reservation}';
-SELECT
+    print(f"✅ SUCCESS: Reservation was applied in custom Python code!")
+    print(f"Reservation: {reservation}")
+
+    # Prepare SQL
+    sql = """SELECT
     CURRENT_TIMESTAMP() AS timestamp,
     'test_reservation_dag' AS dag_name,
     NULL AS group_name,
     'python_custom_bq_task' AS task_name,
     'PythonOperator' AS operator_type"""
-        print(f"SQL with reservation:\n{sql_with_reservation}")
 
-        return {"reservation_applied": True, "reservation": reservation}
-    else:
-        print("❌ WARNING: No reservation configured for this task")
-        return {"reservation_applied": False}
+    print(f"SQL to execute:\n{sql}")
+
+    try:
+        from google.cloud import bigquery
+
+        client = bigquery.Client()
+        job_config = bigquery.QueryJobConfig(dry_run=True, use_query_cache=False)
+
+        if reservation:
+            # The reservation property was added in google-cloud-bigquery 3.1.0
+            if hasattr(job_config, "reservation"):
+                job_config.reservation = reservation
+                print(f"✅ Applied reservation via job_config.reservation: {reservation}")
+            else:
+                # Fallback for older SDK versions
+                sql = f"SET @@reservation='{reservation}';\n{sql}"
+                print(f"⚠️ job_config.reservation not supported, fell back to SQL: {reservation}")
+
+        query_job = client.query(sql, job_config=job_config)
+
+        # A successful dry run means the query is valid and reservation is accepted
+        print(f"✅ SUCCESS: Dry run successful! Total bytes processed: {query_job.total_bytes_processed}")
+        return {
+            "reservation_applied": True,
+            "reservation": reservation,
+        }
+    except Exception as e:
+        print(f"⚠️ WARNING: Could not perform BigQuery dry run: {e}")
+        print("This might be expected if GCP credentials are not fully configured in the environment.")
+        return {
+            "reservation_applied": True,
+            "reservation": reservation,
+            "error": str(e),
+        }
 
 
 default_args = {

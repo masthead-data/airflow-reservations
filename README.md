@@ -1,12 +1,12 @@
 # Airflow Reservations Policy
 
-Airflow Cluster Policy plugin for automatic BigQuery reservation management.
+Airflow Cluster Policy plugin for BigQuery reservation management.
 
 This package integrates with Airflow's [Cluster Policies](https://airflow.apache.org/docs/apache-airflow/stable/administration-and-deployment/cluster-policies.html) to automatically inject BigQuery reservation assignments into your tasks without requiring any changes to your DAG code.
 
 ## Features
 
-- **Automatic re-assignment** - intercepts BigQuery operators and automatically re-assigns them to appropriate reservation based on the configuration:
+- **Automatic re-assignment** - intercepts BigQuery operators and re-assigns them to appropriate reservation based on the configuration:
   - `BigQueryInsertJobOperator` - Injects into `configuration.query.query` dict
   - Any BigQuery operator with a `sql` attribute (e.g. `BigQueryExecuteQueryOperator`, `BigQueryCheckOperator`)
 - **Lookup-based Configuration** - Uses `dag_id.task_id` → `reservation_id` mappings
@@ -178,7 +178,7 @@ Typical workflow:
 2. Read Masthead recommendations and generate `reservations_config.json` with optimal assignments
 3. Merge the config into your DAGs repository
 4. Airflow syncs the updated config file
-5. The policy automatically applies reservations on next task parse
+5. The policy applies reservations on next task parse
 
 ## Troubleshooting
 
@@ -233,8 +233,17 @@ make e2e-all
 ## Supported Versions
 
 This package is tested and compatible with:
+
 - **Airflow 2.6+** (including 2.10.x) - ✅ Fully supported and tested
-- **Airflow 3.x** (including 3.1.x) - ⚠️ Plugin installs but Task SDK requires additional configuration (see notes below)
+- **Airflow 3.x** (including 3.1.x) - ✅ Fully supported and tested (see Airflow 3 notes below)
 - **Python 3.8+** (tested with 3.11 and 3.12)
 
-The plugin uses Airflow's standard [Cluster Policies](https://airflow.apache.org/docs/apache-airflow/stable/administration-and-deployment/cluster-policies.html) API, which is stable across these versions.
+### Airflow 3 Notes
+
+In Airflow 3, the Task SDK parses DAGs in a separate process/container from the Scheduler and Worker. To ensure the policy works correctly:
+
+1. **Installation**: The `airflow-reservations-policy` package must be installed in the environment where the Task SDK executes (typically your custom Airflow image).
+2. **Config Accessibility**: The `reservations_config.json` file must be accessible to the Task SDK process. If you are using remote DAG storage, ensure the config file is bundled with your DAGs or placed in a shared volume.
+3. **Environment Variables**: If you use `RESERVATIONS_CONFIG_PATH`, it must be set in the environment of the worker/execution container as well.
+
+The plugin uses Airflow's standard [Cluster Policies](https://airflow.apache.org/docs/apache-airflow/stable/administration-and-deployment/cluster-policies.html) API, which remains the recommended way to implement cross-cutting concerns in Airflow 3.

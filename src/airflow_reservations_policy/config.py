@@ -32,16 +32,21 @@ Reservation value semantics:
 - null → Skips the task entirely (no SQL modification)
 
 Example usage in a PythonOperator:
+    from google.cloud import bigquery
     from airflow_reservations_policy import get_reservation
 
     def my_bigquery_task(**context):
         dag_id = context['dag'].dag_id
-        task_id = context['task'].task_id
+        task_id = context['task_instance'].task_id
         reservation = get_reservation(dag_id, task_id)
 
-        if reservation is not None:
-            # Prepend to your SQL (includes "none" for on-demand)
-            sql = f"SET @@reservation='{reservation}';\\n{your_sql}"
+        client = bigquery.Client()
+        job_config = bigquery.QueryJobConfig()
+
+        if reservation:
+            job_config.reservation = reservation
+
+        query_job = client.query(sql, job_config=job_config)
 """
 
 from __future__ import annotations
@@ -198,11 +203,12 @@ def get_reservation(dag_id: str, task_id: str) -> str | None:
         Reservation ID string if found (including "none"), None otherwise.
 
     Example:
+        >>> from google.cloud import bigquery
         >>> from airflow_reservations_policy import get_reservation
         >>> reservation = get_reservation("my_dag", "my_task")
-        >>> if reservation is not None:
-        ...     # Apply reservation (could be a path or "none")
-        ...     sql = f"SET @@reservation='{reservation}';\\n{sql}"
+        >>> job_config = bigquery.QueryJobConfig()
+        >>> if reservation:
+        ...     job_config.reservation = reservation
     """
     # Ensure config is loaded
     load_config()

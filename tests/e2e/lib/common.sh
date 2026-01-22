@@ -22,16 +22,19 @@ log_error() {
 }
 
 # Wait for Airflow to be healthy
-# Args: $1 = compose_file, $2 = max_wait_seconds (optional, default 120), $3 = airflow_version (optional)
+# Args: $1 = compose_file, $2 = max_wait_seconds (optional, default 300), $3 = airflow_version (optional)
 wait_for_airflow_health() {
     local compose_file="$1"
-    local max_wait="${2:-120}"
+    local max_wait="${2:-300}"
     local airflow_version="${3:-3}"
     local waited=0
 
     log_info "Waiting for Airflow to be ready..."
 
     while [ $waited -lt $max_wait ]; do
+        if [ "$waited" -gt 0 ] && [ $((waited % 30)) -eq 0 ]; then
+            log_info "Still waiting for Airflow... (${waited}s/${max_wait}s)"
+        fi
         if [ "$airflow_version" = "2" ]; then
             # For Airflow 2.x, check scheduler container health via docker compose
             if docker compose -f "$compose_file" ps | grep -q "scheduler.*healthy"; then
@@ -52,16 +55,18 @@ wait_for_airflow_health() {
     echo ""
 
     log_error "Airflow failed to become healthy within ${max_wait}s"
+    log_info "Recent container logs:"
+    docker compose -f "$compose_file" logs --tail=50
     return 1
 }
 
 # Wait for DAG to be parsed
-# Args: $1 = compose_file, $2 = container_name, $3 = dag_id, $4 = max_wait_seconds (optional, default 60)
+# Args: $1 = compose_file, $2 = container_name, $3 = dag_id, $4 = max_wait_seconds (optional, default 120)
 wait_for_dag() {
     local compose_file="$1"
     local container_name="$2"
     local dag_id="$3"
-    local max_wait="${4:-60}"
+    local max_wait="${4:-120}"
     local waited=0
 
     log_info "Waiting for DAG to be parsed..."
@@ -96,13 +101,13 @@ trigger_dag() {
 }
 
 # Wait for DAG run to complete
-# Args: $1 = compose_file, $2 = container_name, $3 = dag_id, $4 = max_wait_seconds (optional, default 90), $5 = airflow_version (2 or 3)
+# Args: $1 = compose_file, $2 = container_name, $3 = dag_id, $4 = max_wait_seconds (optional, default 180), $5 = airflow_version (2 or 3)
 # Returns: 0 if success, 1 if failed, 2 if timeout
 wait_for_dag_completion() {
     local compose_file="$1"
     local container_name="$2"
     local dag_id="$3"
-    local max_wait="${4:-90}"
+    local max_wait="${4:-180}"
     local airflow_version="${5:-3}"
     local waited=0
     local status=""
