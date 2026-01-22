@@ -1,7 +1,6 @@
 # Test artifacts
-tests/__pycache__/
-src/airflow_reservations/__pycache__/
 tests/e2e/logs/
-tests/e2e/dags/__pycache__/
+__pycache__/
 src/airflow_reservations.egg-info/
 .coverage
+dist/
