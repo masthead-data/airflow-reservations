@@ -1,4 +1,4 @@
-"""E2E Test DAG for airflow-reservations-policy using real BigQuery operators.
+"""E2E Test DAG for airflow-reservations using real BigQuery operators.
 
 This DAG tests the reservation policy with actual BigQuery operators using dryRun mode.
 The operators will log the SQL being executed, which we can verify contains the reservation.
@@ -105,7 +105,7 @@ default_args = {
 with DAG(
     dag_id="test_reservation_dag",
     default_args=default_args,
-    description="E2E test DAG for airflow-reservations-policy with real operators",
+    description="E2E test DAG for airflow-reservations with real operators",
     schedule=None,
     start_date=datetime(2024, 1, 1),
     catchup=False,

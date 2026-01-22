@@ -1,7 +1,7 @@
 # E2E Test Environment for Airflow Reservations Policy (Airflow 2.x)
 #
 # This docker-compose setup runs Airflow 2.x in standalone mode with the
-# airflow-reservations-policy plugin installed from local source.
+# airflow-reservations plugin installed from local source.
 #
 # Usage:
 #   ./e2e/run_test.sh
@@ -59,7 +59,7 @@ services:
     command:
       - -c
       - |
-        echo "Installing airflow-reservations-policy from local source..."
+        echo "Installing airflow-reservations from local source..."
         rm -rf /tmp/plugin && mkdir -p /tmp/plugin
         if command -v rsync >/dev/null 2>&1; then
           rsync -a --exclude='.venv' --exclude='.git' --exclude='*.egg-info' --exclude='__pycache__' /opt/airflow/plugin_src/ /tmp/plugin/

@@ -17,13 +17,13 @@ This package integrates with Airflow's [Cluster Policies](https://airflow.apache
 ## Installation
 
 ```bash
-pip install airflow-reservations-policy
+pip install airflow-reservations
 ```
 
 Or add to your `requirements.txt`:
 
 ```text
-airflow-reservations-policy>=0.1.0
+airflow-reservations=0.1.0
 ```
 
 The policy is automatically registered via Airflow's plugin entrypoint system (requires Airflow 2.6+).
@@ -242,7 +242,7 @@ This package is tested and compatible with:
 
 In Airflow 3, the Task SDK parses DAGs in a separate process/container from the Scheduler and Worker. To ensure the policy works correctly:
 
-1. **Installation**: The `airflow-reservations-policy` package must be installed in the environment where the Task SDK executes (typically your custom Airflow image).
+1. **Installation**: The `airflow-reservations` package must be installed in the environment where the Task SDK executes (typically your custom Airflow image).
 2. **Config Accessibility**: The `reservations_config.json` file must be accessible to the Task SDK process. If you are using remote DAG storage, ensure the config file is bundled with your DAGs or placed in a shared volume.
 3. **Environment Variables**: If you use `RESERVATIONS_CONFIG_PATH`, it must be set in the environment of the worker/execution container as well.
 

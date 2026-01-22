@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Initial release of `airflow-reservations-policy` package.
+- Initial release of `airflow-reservations` package.
 
-[Unreleased]: https://github.com/masthead-data/terraform-google-masthead-agent/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/masthead-data/terraform-google-masthead-agent/releases/tag/v0.1.0
+[Unreleased]: https://github.com/masthead-data/airflow-reservations/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/masthead-data/airflow-reservations/releases/tag/v0.1.0
