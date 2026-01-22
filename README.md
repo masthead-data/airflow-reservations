@@ -126,7 +126,7 @@ flowchart LR
 For custom BigQuery API calls in `PythonOperator`, use the provided API:
 
 ```python
-from airflow_reservations_policy import get_reservation
+from airflow_reservations import get_reservation
 
 def my_bigquery_task(**context):
     dag_id = context['dag'].dag_id
@@ -151,7 +151,7 @@ def my_bigquery_task(**context):
 Look up the reservation ID for a specific task.
 
 ```python
-from airflow_reservations_policy import get_reservation
+from airflow_reservations import get_reservation
 
 reservation = get_reservation("my_dag", "my_task")
 # Returns: "projects/my-project/locations/US/reservations/my-res" or None
@@ -162,7 +162,7 @@ reservation = get_reservation("my_dag", "my_task")
 Load the full configuration dictionary.
 
 ```python
-from airflow_reservations_policy import load_config
+from airflow_reservations import load_config
 
 config = load_config()
 # Returns: {"reservations": {...}}
@@ -194,7 +194,7 @@ Enable debug logging:
 
 ```python
 import logging
-logging.getLogger("airflow_reservations_policy").setLevel(logging.DEBUG)
+logging.getLogger("airflow_reservations").setLevel(logging.DEBUG)
 ```
 
 ### Reservations not being applied
@@ -215,7 +215,7 @@ pip install -e ".[dev]"
 pytest tests/ -v
 
 # Run with coverage
-pytest tests/ --cov=airflow_reservations_policy
+pytest tests/ --cov=airflow_reservations
 
 # Run E2E tests (requires Docker)
 make e2e

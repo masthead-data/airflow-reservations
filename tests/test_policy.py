@@ -27,7 +27,7 @@ class TestTaskPolicy:
 
     def test_ignores_non_bigquery_operators(self):
         """Test that non-BigQuery operators are ignored."""
-        from airflow_reservations_policy import policy
+        from airflow_reservations import policy
 
         task = MockTask(
             task_id="my_task",
@@ -43,7 +43,7 @@ class TestTaskPolicy:
 
     def test_injects_reservation_into_insert_job_operator(self):
         """Test reservation injection into BigQueryInsertJobOperator."""
-        from airflow_reservations_policy import policy
+        from airflow_reservations import policy
 
         task = MockTask(
             task_id="my_task",
@@ -72,7 +72,7 @@ class TestTaskPolicy:
 
     def test_skips_if_reservation_already_set(self):
         """Test that existing reservation statements are not duplicated."""
-        from airflow_reservations_policy import policy
+        from airflow_reservations import policy
 
         original_sql = "SET @@reservation='existing';\nSELECT 1"
         task = MockTask(
@@ -90,7 +90,7 @@ class TestTaskPolicy:
 
     def test_no_injection_without_matching_config(self):
         """Test that tasks without config entries are not modified."""
-        from airflow_reservations_policy import policy
+        from airflow_reservations import policy
 
         original_sql = "SELECT * FROM table"
         task = MockTask(
@@ -108,7 +108,7 @@ class TestTaskPolicy:
 
     def test_injects_reservation_into_execute_query_operator(self):
         """Test reservation injection into BigQueryExecuteQueryOperator."""
-        from airflow_reservations_policy import policy
+        from airflow_reservations import policy
 
         task = MockTask(
             task_id="my_task",
@@ -132,7 +132,7 @@ class TestTaskPolicy:
 
     def test_handles_sql_list_in_execute_query_operator(self):
         """Test reservation injection when sql is a list of statements."""
-        from airflow_reservations_policy import policy
+        from airflow_reservations import policy
 
         task = MockTask(
             task_id="my_task",
@@ -160,7 +160,7 @@ class TestGetTaskIdentifiers:
 
     def test_gets_dag_id_from_attribute(self):
         """Test extracting dag_id from task.dag_id attribute."""
-        from airflow_reservations_policy.policy import _get_task_identifiers
+        from airflow_reservations.policy import _get_task_identifiers
 
         task = MockTask(task_id="task_1", task_type="Test", dag_id="dag_a")
 
@@ -171,7 +171,7 @@ class TestGetTaskIdentifiers:
 
     def test_fallback_to_unknown_dag(self):
         """Test fallback when dag_id is not available."""
-        from airflow_reservations_policy.policy import _get_task_identifiers
+        from airflow_reservations.policy import _get_task_identifiers
 
         task = MockTask(task_id="task_1", task_type="Test", dag_id=None)
 

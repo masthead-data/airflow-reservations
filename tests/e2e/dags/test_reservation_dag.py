@@ -31,7 +31,7 @@ def custom_python_bq_task(**context):
     to apply reservations to BigQuery jobs and that the resulting SQL
     is valid when executed via the BigQuery client.
     """
-    from airflow_reservations_policy.config import get_reservation
+    from airflow_reservations.config import get_reservation
 
     task_id = context["task_instance"].task_id
     dag_id = context["dag"].dag_id

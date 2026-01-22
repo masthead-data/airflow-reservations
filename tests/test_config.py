@@ -7,7 +7,7 @@ from unittest import mock
 
 import pytest
 
-from airflow_reservations_policy import config
+from airflow_reservations import config
 
 
 @pytest.fixture

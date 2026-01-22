@@ -38,7 +38,7 @@ Homepage = "https://github.com/masthead-data/airflow-reservations"
 Repository = "https://github.com/masthead-data/airflow-reservations"
 
 [project.entry-points.'airflow.policy']
-airflow_reservations = "airflow_reservations_policy.policy"
+airflow_reservations = "airflow_reservations.policy"
 
 [tool.setuptools.packages.find]
 where = ["src"]

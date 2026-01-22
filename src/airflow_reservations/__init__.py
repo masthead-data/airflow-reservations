@@ -2,7 +2,7 @@
 
 __version__ = "0.1.0"
 
-from airflow_reservations_policy.config import (
+from airflow_reservations.config import (
     get_reservation,
     get_reservation_entry,
     load_config,

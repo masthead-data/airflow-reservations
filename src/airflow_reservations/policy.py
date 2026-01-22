@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 from airflow.policies import hookimpl
 
-from airflow_reservations_policy.config import (
+from airflow_reservations.config import (
     format_reservation_sql,
     get_reservation,
 )

@@ -33,7 +33,7 @@ Reservation value semantics:
 
 Example usage in a PythonOperator:
     from google.cloud import bigquery
-    from airflow_reservations_policy import get_reservation
+    from airflow_reservations import get_reservation
 
     def my_bigquery_task(**context):
         dag_id = context['dag'].dag_id
@@ -204,7 +204,7 @@ def get_reservation(dag_id: str, task_id: str) -> str | None:
 
     Example:
         >>> from google.cloud import bigquery
-        >>> from airflow_reservations_policy import get_reservation
+        >>> from airflow_reservations import get_reservation
         >>> reservation = get_reservation("my_dag", "my_task")
         >>> job_config = bigquery.QueryJobConfig()
         >>> if reservation:

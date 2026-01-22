@@ -31,7 +31,7 @@ test:
 	.venv/bin/pytest tests/ -v
 
 test-cov:
-	.venv/bin/pytest tests/ --cov=airflow_reservations_policy --cov-report=term-missing
+	.venv/bin/pytest tests/ --cov=airflow_reservations --cov-report=term-missing
 
 lint:
 	.venv/bin/python -m black --check src/ tests/
