@@ -13,12 +13,14 @@ class MockTask:
         dag_id: str = "test_dag",
         configuration: dict = None,
         sql: str = None,
+        use_legacy_sql: bool = None,
     ):
         self.task_id = task_id
         self.task_type = task_type
         self.dag_id = dag_id
         self.configuration = configuration
         self.sql = sql
+        self.use_legacy_sql = use_legacy_sql
         self.dag = None
 
 
@@ -64,11 +66,9 @@ class TestTaskPolicy:
         ):
             policy.task_policy(task)
 
-        expected_sql = (
-            "SET @@reservation='projects/p/locations/US/reservations/r';\n"
-            "SELECT * FROM table"
-        )
-        assert task.configuration["query"]["query"] == expected_sql
+        # Should use reservationId in configuration, NOT SQL injection
+        assert task.configuration["query"]["reservationId"] == "projects/p/locations/US/reservations/r"
+        assert task.configuration["query"]["query"] == "SELECT * FROM table"
 
     def test_skips_if_reservation_already_set(self):
         """Test that existing reservation statements are not duplicated."""
@@ -124,11 +124,95 @@ class TestTaskPolicy:
         ):
             policy.task_policy(task)
 
+        # Should fallback to SQL injection for ExecuteQueryOperator if no configuration
         expected_sql = (
             "SET @@reservation='projects/p/locations/US/reservations/r';\n"
             "SELECT * FROM table"
         )
         assert task.sql == expected_sql
+
+    def test_handles_legacy_sql_with_configuration_support(self):
+        """Test that Legacy SQL is supported via configuration injection."""
+        from airflow_reservations import policy
+
+        task = MockTask(
+            task_id="my_task",
+            task_type="BigQueryInsertJobOperator",
+            dag_id="my_dag",
+            configuration={
+                "query": {
+                    "query": "SELECT [column] FROM [table]",
+                    "useLegacySql": True,
+                }
+            },
+        )
+
+        with mock.patch.object(policy, "get_reservation", return_value="res1"):
+            policy.task_policy(task)
+
+        # Should use reservationId (safe for Legacy SQL)
+        assert task.configuration["query"]["reservationId"] == "res1"
+        assert "SET @@reservation" not in task.configuration["query"]["query"]
+
+    def test_skips_sql_fallback_for_check_operators(self):
+        """Test that Check operators never get SQL injection if no configuration."""
+        from airflow_reservations import policy
+
+        task = MockTask(
+            task_id="my_task",
+            task_type="BigQueryCheckOperator",
+            dag_id="my_dag",
+            sql="SELECT count(*) FROM table",
+        )
+
+        with mock.patch.object(policy, "get_reservation", return_value="res1"):
+            policy.task_policy(task)
+
+        # SQL should be unchanged (no configuration attribute on MockTask by default)
+        assert task.sql == "SELECT count(*) FROM table"
+
+    def test_skips_sql_fallback_for_legacy_sql(self):
+        """Test that SQL injection is skipped if use_legacy_sql is True."""
+        from airflow_reservations import policy
+
+        task = MockTask(
+            task_id="my_task",
+            task_type="BigQueryExecuteQueryOperator",
+            dag_id="my_dag",
+            sql="SELECT * FROM [table]",
+            use_legacy_sql=True,
+        )
+
+        with mock.patch.object(policy, "get_reservation", return_value="res1"):
+            policy.task_policy(task)
+
+        # SQL should be unchanged
+        assert task.sql == "SELECT * FROM [table]"
+
+    def test_injects_reservation_into_get_data_operator(self):
+        """Test reservation injection into BigQueryGetDataOperator."""
+        from airflow_reservations import policy
+
+        # GetDataOperator often uses configuration or sql depending on version
+        task = MockTask(
+            task_id="my_task",
+            task_type="BigQueryGetDataOperator",
+            dag_id="my_dag",
+            configuration={
+                "query": {
+                    "query": "SELECT * FROM table",
+                }
+            },
+        )
+
+        with mock.patch.object(
+            policy,
+            "get_reservation",
+            return_value="projects/p/locations/US/reservations/r",
+        ):
+            policy.task_policy(task)
+
+        assert task.configuration["query"]["reservationId"] == "projects/p/locations/US/reservations/r"
 
     def test_handles_sql_list_in_execute_query_operator(self):
         """Test reservation injection when sql is a list of statements."""

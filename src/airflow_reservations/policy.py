@@ -1,8 +1,9 @@
 """Airflow Cluster Policy for BigQuery reservation management.
 
 This module implements the task_policy hook that automatically injects
-BigQuery reservation assignments into BigQueryInsertJobOperator and
-BigQueryExecuteQueryOperator tasks based on the Masthead configuration.
+BigQuery reservation assignments into BigQuery operators based on
+the Masthead configuration. It prioritizes using the reservationId
+field in the job configuration.
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ BIGQUERY_OPERATOR_TYPES = frozenset(
         "BigQueryIntervalCheckOperator",
         "BigQueryColumnCheckOperator",
         "BigQueryTableCheckOperator",
+        "BigQueryGetDataOperator",
     }
 )
 
@@ -56,10 +58,9 @@ def _inject_reservation_into_configuration(
     task: BaseOperator,
     reservation_id: str,
 ) -> bool:
-    """Inject reservation into BigQueryInsertJobOperator configuration.
+    """Inject reservation into BigQuery operator configuration.
 
-    Modifies the task's configuration dict to prepend SET @@reservation
-    to the SQL query.
+    Modifies the task's configuration dict to set the reservationId.
 
     Args:
         task: The BigQuery operator task.
@@ -69,7 +70,6 @@ def _inject_reservation_into_configuration(
         True if injection was successful, False otherwise.
     """
     if not hasattr(task, "configuration"):
-        logger.debug("Task %s has no configuration attribute", task.task_id)
         return False
 
     configuration = task.configuration
@@ -77,33 +77,27 @@ def _inject_reservation_into_configuration(
         logger.debug("Task %s configuration is not a dict", task.task_id)
         return False
 
-    query_config = configuration.get("query", {})
+    # Set reservationId in the query configuration
+    # This works for Standard and Legacy SQL and doesn't modify the query string.
+    query_config = configuration.setdefault("query", {})
     if not isinstance(query_config, dict):
         logger.debug("Task %s query config is not a dict", task.task_id)
         return False
 
-    original_sql = query_config.get("query", "")
-    if not original_sql:
-        logger.debug("Task %s has no SQL query", task.task_id)
-        return False
-
     # Check if reservation is already set (idempotency)
-    if "SET @@reservation" in original_sql:
+    existing_reservation = query_config.get("reservationId")
+    if existing_reservation == reservation_id:
         logger.debug(
-            "Task %s already has reservation set, skipping",
+            "Task %s already has reservation %s set, skipping",
             task.task_id,
+            reservation_id,
         )
         return False
 
-    # Prepend the reservation SET statement
-    reservation_sql = format_reservation_sql(reservation_id)
-    new_sql = reservation_sql + original_sql
+    query_config["reservationId"] = reservation_id
 
-    # Mutate the configuration in place
-    task.configuration["query"]["query"] = new_sql
-
-    logger.info(
-        "Injected reservation %s into task %s",
+    logger.debug(
+        "Injected reservationId %s into task %s configuration",
         reservation_id,
         task.task_id,
     )
@@ -174,16 +168,7 @@ def _inject_reservation_into_sql_attribute(
 
 @hookimpl
 def task_policy(task: BaseOperator) -> None:
-    """Airflow cluster policy hook for BigQuery reservation injection.
-
-    This function is called by Airflow for every task when it is loaded
-    from the DagBag. For BigQuery tasks that have a matching entry in
-    the Masthead configuration, it prepends the reservation assignment
-    to the SQL query.
-
-    Args:
-        task: The task operator being processed.
-    """
+    """Airflow cluster policy hook for BigQuery reservation injection."""
     # Only process BigQuery operators
     if task.task_type not in BIGQUERY_OPERATOR_TYPES:
         return
@@ -201,9 +186,29 @@ def task_policy(task: BaseOperator) -> None:
         )
         return
 
-    # Try injection methods based on operator type
-    if task.task_type == "BigQueryInsertJobOperator":
-        _inject_reservation_into_configuration(task, reservation_id)
-    else:
-        # All other BigQuery operators use sql attribute (ExecuteQueryOperator, Check operators, etc.)
+    # 1. First priority: Inject into configuration (safest, supports Legacy SQL)
+    if _inject_reservation_into_configuration(task, reservation_id):
+        return
+
+    # 2. Second priority: Fallback to SQL injection for specific "Job" operators
+    # ONLY if they use Standard SQL (SET is not supported in Legacy SQL).
+    # Check operators and others that don't support multistatement scripts are skipped.
+    if task.task_type in ("BigQueryInsertJobOperator", "BigQueryExecuteQueryOperator"):
+        use_legacy_sql = getattr(task, "use_legacy_sql", None)
+
+        # If not explicitly on the task, check configuration if available
+        if use_legacy_sql is None and hasattr(task, "configuration"):
+            config = getattr(task, "configuration", {})
+            if isinstance(config, dict):
+                use_legacy_sql = config.get("query", {}).get("useLegacySql")
+
+        # BigQuery defaults to Standard SQL (False) if not specified
+        if use_legacy_sql is True:
+            logger.debug(
+                "Task %s uses Legacy SQL and has no configuration attribute. "
+                "Skipping SQL injection.",
+                task.task_id,
+            )
+            return
+
         _inject_reservation_into_sql_attribute(task, reservation_id)

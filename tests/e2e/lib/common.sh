@@ -144,24 +144,37 @@ wait_for_dag_completion() {
                 fi
 
                 # Show logs for failed tasks
-                log_info "Fetching logs for failed tasks..."
+                log_info "Fetching logs for all failed tasks..."
                 local log_path="/opt/airflow/logs/dag_id=${dag_id}/run_id=${run_id}"
 
                 # First, check if log directory exists
                 if ! docker compose -f "$compose_file" exec -T "$container_name" test -d "$log_path" 2>/dev/null; then
                     log_error "Log directory not found: $log_path"
-                    log_info "Tasks failed during initialization (no start_date). Checking scheduler logs..."
-                    # Show last 100 lines and filter for relevant errors
+                    log_info "Determining why initialization failed..."
                     docker compose -f "$compose_file" logs --tail=100 2>&1 | grep -B 5 -A 10 -E "(ERROR|Exception|Traceback|Failed)" | tail -80
                 else
-                    # Try to show at least the first failed task's log
-                    local first_log=$(docker compose -f "$compose_file" exec -T "$container_name" \
-                        find "$log_path" -name "*.log" -type f 2>/dev/null | head -1)
-                    if [ -n "$first_log" ]; then
-                        log_info "=== Sample failed task log: $first_log ==="
-                        docker compose -f "$compose_file" exec -T "$container_name" cat "$first_log" 2>/dev/null | tail -50
+                    # Find and display logs for all tasks that didn't succeed
+                    # We first get the list of non-success tasks
+                    local failed_tasks=$(docker compose -f "$compose_file" exec -T "$container_name" \
+                        airflow tasks states-for-dag-run "$dag_id" "$run_id" 2>/dev/null | grep -E "(failed|upstream_failed|skipped|retry)" | awk '{print $5}')
+                    
+                    if [ -z "$failed_tasks" ]; then
+                         # Fallback if the command above failed or returned nothing
+                         log_info "Could not determine failed tasks list. Showing all available task logs."
+                         for log_file in $(docker compose -f "$compose_file" exec -T "$container_name" find "$log_path" -name "*.log" -type f); do
+                            log_info "=== Log for $log_file ==="
+                            docker compose -f "$compose_file" exec -T "$container_name" cat "$log_file" | tail -50
+                         done
                     else
-                        log_error "No log files found in $log_path"
+                        for task in $failed_tasks; do
+                            log_info "=== Logs for failed task: $task ==="
+                            # Find all attempts for this task
+                            local task_logs=$(docker compose -f "$compose_file" exec -T "$container_name" \
+                                find "$log_path" -name "task_id=${task}*" -type d 2>/dev/null)
+                            for tlog in $task_logs; do
+                                docker compose -f "$compose_file" exec -T "$container_name" find "$tlog" -name "*.log" -type f -exec echo "--- Log file: {} ---" \; -exec cat {} \; | tail -100
+                            done
+                        done
                     fi
                 fi
 
@@ -244,17 +257,18 @@ verify_all_tasks() {
     log_info "Verifying reservation injection..."
     log_info "=========================================="
 
-    # Task 1: Should have reservation path in SQL
-    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_insert_job_task" "SET @@reservation='projects/masthead-dev/locations/US/reservations/capacity-1'" "true"; then
-        log_info "✅ Task 1: Reservation injected into BigQueryInsertJobOperator"
+    # Task 1: BigQueryInsertJobOperator (should use reservationId in configuration)
+    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_insert_job_task" "'reservationId': 'projects/masthead-dev/locations/US/reservations/capacity-1'" "true"; then
+        log_info "✅ Task 1: reservationId injected into BigQueryInsertJobOperator"
         passed=$((passed + 1))
     else
-        log_error "❌ Task 1: Reservation NOT found in BigQueryInsertJobOperator"
+        log_error "❌ Task 1: reservationId NOT found in BigQueryInsertJobOperator configuration"
         failed=$((failed + 1))
     fi
 
-    # Task 2: Should have reservation path in SQL
-    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_execute_query_task" "SET @@reservation='projects/masthead-dev/locations/US/reservations/capacity-1'" "true"; then
+    # Task 2: BigQueryExecuteQueryOperator (fallback to SQL if no configuration found in old versions)
+    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_execute_query_task" "SET @@reservation='projects/masthead-dev/locations/US/reservations/capacity-1'" "true" || \
+       verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_execute_query_task" "'reservationId': 'projects/masthead-dev/locations/US/reservations/capacity-1'" "true"; then
         log_info "✅ Task 2: Reservation injected into BigQueryExecuteQueryOperator"
         passed=$((passed + 1))
     else
@@ -262,8 +276,9 @@ verify_all_tasks() {
         failed=$((failed + 1))
     fi
 
-    # Task 3: Should have 'none' for on-demand
-    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_ondemand_task" "SET @@reservation='none'" "true"; then
+    # Task 3: Should have 'none' (in configuration or SQL)
+    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_ondemand_task" "'reservationId': 'none'" "true" || \
+       verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_ondemand_task" "SET @@reservation='none'" "true"; then
         log_info "✅ Task 3: On-demand reservation ('none') injected"
         passed=$((passed + 1))
     else
@@ -271,8 +286,9 @@ verify_all_tasks() {
         failed=$((failed + 1))
     fi
 
-    # Task 4: Should NOT have reservation (not in config)
-    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_no_reservation_task" "SET @@reservation" "false"; then
+    # Task 4: Should NOT have reservation (neither config nor SQL)
+    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_no_reservation_task" "'reservationId':" "false" && \
+       verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_no_reservation_task" "SET @@reservation" "false"; then
         log_info "✅ Task 4: Correctly has no reservation"
         passed=$((passed + 1))
     else
@@ -281,7 +297,8 @@ verify_all_tasks() {
     fi
 
     # Task 5: Nested task should have reservation
-    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "my_group.nested_task" "SET @@reservation='projects/masthead-dev/locations/US/reservations/capacity-1'" "true"; then
+    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "my_group.nested_task" "'reservationId': 'projects/masthead-dev/locations/US/reservations/capacity-1'" "true" || \
+       verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "my_group.nested_task" "SET @@reservation='projects/masthead-dev/locations/US/reservations/capacity-1'" "true"; then
         log_info "✅ Task 5: Nested task reservation injected"
         passed=$((passed + 1))
     else
@@ -289,26 +306,127 @@ verify_all_tasks() {
         failed=$((failed + 1))
     fi
 
-    # Task 6: BigQueryCheckOperator should have reservation
-    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_check_task" "SET @@reservation='projects/masthead-dev/locations/US/reservations/capacity-1'" "true"; then
-        log_info "✅ Task 6: BigQueryCheckOperator has reservation"
+    # Task 6: BigQueryCheckOperator (Verifying SAFETY - should NOT have SQL injection)
+    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_check_task" "SET @@reservation" "false"; then
+        log_info "✅ Task 6: BigQueryCheckOperator is safe (no SQL injection)"
         passed=$((passed + 1))
     else
-        log_error "❌ Task 6: BigQueryCheckOperator reservation NOT found"
+        log_error "❌ Task 6: Unexpected SQL injection found in BigQueryCheckOperator"
         failed=$((failed + 1))
     fi
 
-    # Task 7: Python custom BQ task should have reservation applied
-    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "python_custom_bq_task" "✅ SUCCESS: Reservation was applied in custom Python code!" "true"; then
-        log_info "✅ Task 7: Python custom BigQuery task has reservation"
+    # Task 7: BigQueryValueCheckOperator (Verifying SAFETY)
+    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_value_check_task" "SET @@reservation" "false"; then
+        log_info "✅ Task 7: BigQueryValueCheckOperator is safe (no SQL injection)"
         passed=$((passed + 1))
     else
-        log_error "❌ Task 7: Python custom BigQuery task reservation NOT found"
+        log_error "❌ Task 7: Unexpected SQL injection found in BigQueryValueCheckOperator"
+        failed=$((failed + 1))
+    fi
+
+    # Task 8: BigQueryGetDataOperator (Verifying SAFETY and SUCCESS)
+    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_get_data_task" "SET @@reservation" "false"; then
+        log_info "✅ Task 8: BigQueryGetDataOperator is safe and succeeded"
+        passed=$((passed + 1))
+    else
+        log_error "❌ Task 8: Unexpected SQL injection found in BigQueryGetDataOperator"
+        failed=$((failed + 1))
+    fi
+
+    # Task 9: Legacy SQL task (should use reservationId)
+    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_insert_job_legacy_task" "'reservationId': 'projects/masthead-dev/locations/US/reservations/capacity-1'" "true"; then
+        log_info "✅ Task 9: Legacy SQL task has reservationId"
+        passed=$((passed + 1))
+    else
+        log_error "❌ Task 9: Legacy SQL task reservationId NOT found"
+        failed=$((failed + 1))
+    fi
+
+    # Task 10: Python custom BQ task should have reservation applied
+    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "python_custom_bq_task" "✅ SUCCESS: Reservation was applied in custom Python code!" "true"; then
+        log_info "✅ Task 10: Python custom BigQuery task has reservation"
+        passed=$((passed + 1))
+    else
+        log_error "❌ Task 10: Python custom BigQuery task reservation NOT found"
+        failed=$((failed + 1))
+    fi
+
+    # Task 11: BigQueryExecuteQueryOperator (applied) should show reservation injection
+    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_execute_query_op_applied" "SET @@reservation='projects/masthead-dev/locations/US/reservations/capacity-1'" "true" || \
+       verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_execute_query_op_applied" "'reservationId': 'projects/masthead-dev/locations/US/reservations/capacity-1'" "true"; then
+        log_info "✅ Task 11: Reservation injected into BigQueryExecuteQueryOperator (applied)"
+        passed=$((passed + 1))
+    else
+        log_error "❌ Task 11: Reservation NOT found for BigQueryExecuteQueryOperator (applied)"
+        failed=$((failed + 1))
+    fi
+
+    # Task 12: BigQueryExecuteQueryOperator (skipped) should not receive our reservation
+    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_execute_query_op_skipped" "SET @@reservation='projects/masthead-dev/locations/US/reservations/capacity-1'" "false" && \
+       verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_execute_query_op_skipped" "'reservationId': 'projects/masthead-dev/locations/US/reservations/capacity-1'" "false"; then
+        log_info "✅ Task 12: BigQueryExecuteQueryOperator (skipped) correctly not re-assigned"
+        passed=$((passed + 1))
+    else
+        log_error "❌ Task 12: Unexpected reservation re-assignment for BigQueryExecuteQueryOperator (skipped)"
+        failed=$((failed + 1))
+    fi
+
+    # Task 13: BigQueryIntervalCheckOperator (applied) – ensure no SQL injection artifacts
+    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_interval_check_applied" "SET @@reservation" "false"; then
+        log_info "✅ Task 13: BigQueryIntervalCheckOperator (applied) is safe (no SQL injection)"
+        passed=$((passed + 1))
+    else
+        log_error "❌ Task 13: Unexpected SQL injection found in BigQueryIntervalCheckOperator (applied)"
+        failed=$((failed + 1))
+    fi
+
+    # Task 14: BigQueryIntervalCheckOperator (skipped) – also should have no SQL injection
+    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_interval_check_skipped" "SET @@reservation" "false"; then
+        log_info "✅ Task 14: BigQueryIntervalCheckOperator (skipped) is safe (no SQL injection)"
+        passed=$((passed + 1))
+    else
+        log_error "❌ Task 14: Unexpected SQL injection found in BigQueryIntervalCheckOperator (skipped)"
+        failed=$((failed + 1))
+    fi
+
+    # Task 15: BigQueryColumnCheckOperator (applied) – ensure job ran without SQL injection
+    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_column_check_applied" "SET @@reservation" "false"; then
+        log_info "✅ Task 15: BigQueryColumnCheckOperator (applied) is safe (no SQL injection)"
+        passed=$((passed + 1))
+    else
+        log_error "❌ Task 15: Unexpected SQL injection found in BigQueryColumnCheckOperator (applied)"
+        failed=$((failed + 1))
+    fi
+
+    # Task 16: BigQueryColumnCheckOperator (skipped) – same safety expectations
+    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_column_check_skipped" "SET @@reservation" "false"; then
+        log_info "✅ Task 16: BigQueryColumnCheckOperator (skipped) is safe (no SQL injection)"
+        passed=$((passed + 1))
+    else
+        log_error "❌ Task 16: Unexpected SQL injection found in BigQueryColumnCheckOperator (skipped)"
+        failed=$((failed + 1))
+    fi
+
+    # Task 17: BigQueryTableCheckOperator (applied) – table checks run without SQL injection
+    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_table_check_applied" "SET @@reservation" "false"; then
+        log_info "✅ Task 17: BigQueryTableCheckOperator (applied) is safe (no SQL injection)"
+        passed=$((passed + 1))
+    else
+        log_error "❌ Task 17: Unexpected SQL injection found in BigQueryTableCheckOperator (applied)"
+        failed=$((failed + 1))
+    fi
+
+    # Task 18: BigQueryTableCheckOperator (skipped) – same safety expectations
+    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_table_check_skipped" "SET @@reservation" "false"; then
+        log_info "✅ Task 18: BigQueryTableCheckOperator (skipped) is safe (no SQL injection)"
+        passed=$((passed + 1))
+    else
+        log_error "❌ Task 18: Unexpected SQL injection found in BigQueryTableCheckOperator (skipped)"
         failed=$((failed + 1))
     fi
 
     log_info "=========================================="
-    log_info "Test Results: ${passed}/7 passed, ${failed}/7 failed"
+    log_info "Test Results: ${passed}/18 passed, ${failed}/18 failed"
     log_info "=========================================="
 
     return $failed

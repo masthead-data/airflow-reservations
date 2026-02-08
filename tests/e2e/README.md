@@ -73,13 +73,33 @@ The unified test runner (`run_e2e_test.sh`) supports multiple Airflow versions t
 
 ## Test Scenarios
 
-Each test run verifies 5 scenarios:
+Each test run now verifies reservation behavior for all supported BigQuery operator types:
 
-1. **Task 1 (bq_insert_job_task)**: Standard reservation injection
-2. **Task 2 (bq_execute_query_task)**: Query operator reservation injection
-3. **Task 3 (bq_ondemand_task)**: On-demand reservation (`'none'`)
-4. **Task 4 (bq_no_reservation_task)**: No reservation (task not in config)
-5. **Task 5 (my_group.nested_task)**: Nested task group reservation
+- **BigQueryInsertJobOperator**
+  - `bq_insert_job_task`: standard reservation injection
+  - `bq_execute_query_task`: query-style insert job with reservation
+  - `bq_ondemand_task`: on-demand reservation (`'none'`)
+  - `bq_no_reservation_task`: no reservation (task not in config)
+  - `my_group.nested_task`: nested task group reservation
+  - `bq_insert_job_legacy_task`: legacy SQL configuration with reservation
+- **BigQueryExecuteQueryOperator**
+  - `bq_execute_query_op_applied`: re-assigned to configured reservation
+  - `bq_execute_query_op_skipped`: pre-existing reservation, policy skip verified
+- **BigQueryCheckOperator / BigQueryValueCheckOperator**
+  - `bq_check_task`, `bq_value_check_task`: safety checks that ensure no SQL-based injection is applied
+- **BigQueryGetDataOperator**
+  - `bq_get_data_task`: data fetch using public dataset with reservation-aware policy handling
+- **BigQueryIntervalCheckOperator**
+  - `bq_interval_check_applied`, `bq_interval_check_skipped`: interval checks run without unsafe SQL injection
+- **BigQueryColumnCheckOperator**
+  - `bq_column_check_applied`, `bq_column_check_skipped`: column checks on a public table with safe execution
+- **BigQueryTableCheckOperator**
+  - `bq_table_check_applied`, `bq_table_check_skipped`: table-level checks with safe execution
+
+For operators where a BigQuery `job_id` can be retrieved, the DAG includes downstream assertion
+tasks that verify the corresponding BigQuery job completed successfully (and, where possible,
+used the expected reservation). The shell harness (`verify_all_tasks`) continues to provide
+log-based verification and debugging support.
 
 ## Common Library
 
