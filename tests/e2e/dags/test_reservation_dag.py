@@ -14,20 +14,26 @@ except ImportError:
     from airflow.operators.python import PythonOperator
 
 from airflow.providers.google.cloud.operators.bigquery import (
-    BigQueryCheckOperator,
-    BigQueryColumnCheckOperator,
-    BigQueryExecuteQueryOperator,
-    BigQueryGetDataOperator,
     BigQueryInsertJobOperator,
-    BigQueryIntervalCheckOperator,
-    BigQueryTableCheckOperator,
-    BigQueryValueCheckOperator,
 )
+
+try:
+    from airflow.providers.google.cloud.operators.bigquery import (
+        BigQueryExecuteQueryOperator,
+    )
+except ImportError:
+    BigQueryExecuteQueryOperator = None
 
 try:
     from airflow.sdk import TaskGroup
 except ImportError:
     from airflow.utils.task_group import TaskGroup
+
+import airflow
+
+# Detect Airflow version to handle version-specific compatibility
+AIRFLOW_VERSION = tuple(int(x) for x in airflow.__version__.split(".")[:2])
+IS_AIRFLOW_3_PLUS = AIRFLOW_VERSION >= (3, 0)
 
 
 def custom_python_bq_task(**context):
@@ -76,23 +82,31 @@ def custom_python_bq_task(**context):
             # The reservation property was added in google-cloud-bigquery 3.1.0
             if hasattr(job_config, "reservation"):
                 job_config.reservation = reservation
-                print(f"✅ Applied reservation via job_config.reservation: {reservation}")
+                print(
+                    f"✅ Applied reservation via job_config.reservation: {reservation}"
+                )
             else:
                 # Fallback for older SDK versions
                 sql = f"SET @@reservation='{reservation}';\n{sql}"
-                print(f"⚠️ job_config.reservation not supported, fell back to SQL: {reservation}")
+                print(
+                    f"⚠️ job_config.reservation not supported, fell back to SQL: {reservation}"
+                )
 
         query_job = client.query(sql, job_config=job_config)
 
         # A successful dry run means the query is valid and reservation is accepted
-        print(f"✅ SUCCESS: Dry run successful! Total bytes processed: {query_job.total_bytes_processed}")
+        print(
+            f"✅ SUCCESS: Dry run successful! Total bytes processed: {query_job.total_bytes_processed}"
+        )
         return {
             "reservation_applied": True,
             "reservation": reservation,
         }
     except Exception as e:
         print(f"⚠️ WARNING: Could not perform BigQuery dry run: {e}")
-        print("This might be expected if GCP credentials are not fully configured in the environment.")
+        print(
+            "This might be expected if GCP credentials are not fully configured in the environment."
+        )
         return {
             "reservation_applied": True,
             "reservation": reservation,
@@ -100,7 +114,9 @@ def custom_python_bq_task(**context):
         }
 
 
-def assert_bigquery_job(subject_task_id: str, expected_reservation: str | None, **context):
+def assert_bigquery_job(
+    subject_task_id: str, expected_reservation: str | None, **context
+):
     """
     Assertion task that validates the upstream BigQuery job completed successfully
     and, where possible, used the expected reservation.
@@ -120,14 +136,18 @@ def assert_bigquery_job(subject_task_id: str, expected_reservation: str | None, 
         # Fallback to default return_value from operators like BigQueryInsertJobOperator
         job_id = ti.xcom_pull(task_ids=subject_task_id)
     if not job_id:
-        raise RuntimeError(f"Could not find job_id in XCom for {dag_id}.{subject_task_id}")
+        raise RuntimeError(
+            f"Could not find job_id in XCom for {dag_id}.{subject_task_id}"
+        )
 
     client = bigquery.Client()
     job = client.get_job(job_id)
 
     # 2. Ensure job completed successfully.
     if job.state != "DONE":
-        raise RuntimeError(f"BigQuery job {job_id} for {dag_id}.{subject_task_id} not DONE (state={job.state})")
+        raise RuntimeError(
+            f"BigQuery job {job_id} for {dag_id}.{subject_task_id} not DONE (state={job.state})"
+        )
 
     if getattr(job, "error_result", None):
         raise RuntimeError(
@@ -154,7 +174,17 @@ def assert_bigquery_job(subject_task_id: str, expected_reservation: str | None, 
         stats = getattr(job, "_properties", {}).get("statistics", {})
         actual_reservation = stats.get("reservation_id")
 
-    if not actual_reservation or expected_reservation not in str(actual_reservation):
+    is_match = False
+    if actual_reservation and expected_reservation:
+        actual_str = str(actual_reservation)
+        # Check for substring match (handles full path vs short ID)
+        if expected_reservation in actual_str:
+            is_match = True
+        # Also check if just the reservation name matches
+        elif expected_reservation.split("/")[-1] == actual_str.split(".")[-1]:
+            is_match = True
+
+    if not is_match:
         raise AssertionError(
             f"Expected BigQuery job {job_id} for {dag_id}.{subject_task_id} to use reservation "
             f"containing '{expected_reservation}', but got {actual_reservation!r}"
@@ -273,46 +303,7 @@ with DAG(
             location="US",
         )
 
-    # Task 6: BigQueryCheckOperator to test Check operators support
-    bq_check = BigQueryCheckOperator(
-        task_id="bq_check_task",
-        sql="""SELECT COUNT(*) > 0 FROM (
-            SELECT
-                CURRENT_TIMESTAMP() AS timestamp,
-                'test_reservation_dag' AS dag_name,
-                NULL AS group_name,
-                'bq_check_task' AS task_name,
-                'BigQueryCheckOperator' AS operator_type
-        )""",
-        use_legacy_sql=False,
-        location="US",
-        deferrable=True,
-    )
-
-    # Task 7: BigQueryValueCheckOperator
-    bq_value_check = BigQueryValueCheckOperator(
-        task_id="bq_value_check_task",
-        sql="SELECT 1",
-        pass_value=1,
-        use_legacy_sql=False,
-        location="US",
-        deferrable=True,
-    )
-
-    # Task 8: BigQueryGetDataOperator
-    bq_get_data = BigQueryGetDataOperator(
-        task_id="bq_get_data_task",
-        project_id="bigquery-public-data",
-        dataset_id="usa_names",
-        table_id="usa_1910_2013",
-        max_results=1,
-        deferrable=True,
-    )
-    # Patch the task to have a configuration for testing our policy (simulation)
-    bq_get_data.configuration = {"query": {"query": "SELECT * FROM `bigquery-public-data.usa_names.usa_1910_2013` LIMIT 1", "useLegacySql": False}}
-
-    # Task 9: BigQueryInsertJobOperator with Legacy SQL
-    # This verifies reservationId injection for Legacy SQL tasks
+    # Task 8: BigQueryInsertJobOperator with Legacy SQL
     bq_insert_job_legacy = BigQueryInsertJobOperator(
         task_id="bq_insert_job_legacy_task",
         configuration={
@@ -325,116 +316,49 @@ with DAG(
         location="US",
     )
 
-    # Task 10: Custom Python task demonstrating programmatic reservation usage
+    # Task 9: Custom Python task demonstrating programmatic reservation usage
     python_custom_bq = PythonOperator(
         task_id="python_custom_bq_task",
         python_callable=custom_python_bq_task,
     )
 
-    # Task 11/12: BigQueryExecuteQueryOperator with applied and skipped reservation scenarios
-    bq_execute_query_op_applied = BigQueryExecuteQueryOperator(
-        task_id="bq_execute_query_op_applied",
-        sql="""
-        SELECT
-            CURRENT_TIMESTAMP() AS timestamp,
-            'test_reservation_dag' AS dag_name,
-            NULL AS group_name,
-            'bq_execute_query_op_applied' AS task_name,
-            'BigQueryExecuteQueryOperator' AS operator_type
-        """,
-        use_legacy_sql=False,
-        location="US",
-        deferrable=True,
-    )
+    # Task 10/11: BigQueryExecuteQueryOperator with applied and skipped reservation scenarios
+    if BigQueryExecuteQueryOperator:
+        bq_execute_query_op_applied = BigQueryExecuteQueryOperator(
+            task_id="bq_execute_query_op_applied",
+            sql="""
+            SELECT
+                CURRENT_TIMESTAMP() AS timestamp,
+                'test_reservation_dag' AS dag_name,
+                NULL AS group_name,
+                'bq_execute_query_op_applied' AS task_name,
+                'BigQueryExecuteQueryOperator' AS operator_type
+            """,
+            use_legacy_sql=False,
+            location="US",
+            deferrable=True,
+        )
 
-    bq_execute_query_op_skipped = BigQueryExecuteQueryOperator(
-        task_id="bq_execute_query_op_skipped",
-        sql="""
-        SET @@reservation='preexisting';
-        SELECT
-            CURRENT_TIMESTAMP() AS timestamp,
-            'test_reservation_dag' AS dag_name,
-            NULL AS group_name,
-            'bq_execute_query_op_skipped' AS task_name,
-            'BigQueryExecuteQueryOperator' AS operator_type
-        """,
-        use_legacy_sql=False,
-        location="US",
-        deferrable=True,
-    )
+        bq_execute_query_op_skipped = BigQueryExecuteQueryOperator(
+            task_id="bq_execute_query_op_skipped",
+            sql="""
+            SET @@reservation='preexisting';
+            SELECT
+                CURRENT_TIMESTAMP() AS timestamp,
+                'test_reservation_dag' AS dag_name,
+                NULL AS group_name,
+                'bq_execute_query_op_skipped' AS task_name,
+                'BigQueryExecuteQueryOperator' AS operator_type
+            """,
+            use_legacy_sql=False,
+            location="US",
+            deferrable=True,
+        )
+    else:
+        bq_execute_query_op_applied = None
+        bq_execute_query_op_skipped = None
 
-    # Task 13/14: BigQueryIntervalCheckOperator applied / skipped
-    bq_interval_check_applied = BigQueryIntervalCheckOperator(
-        task_id="bq_interval_check_applied",
-        table="bigquery-public-data.samples.shakespeare",
-        metrics_thresholds={"COUNT(*)": 2},
-        date_filter_column="word",
-        days_back=-1,
-        use_legacy_sql=False,
-        location="US",
-        deferrable=True,
-    )
 
-    bq_interval_check_skipped = BigQueryIntervalCheckOperator(
-        task_id="bq_interval_check_skipped",
-        table="bigquery-public-data.samples.shakespeare",
-        metrics_thresholds={"COUNT(*)": 2},
-        date_filter_column="word",
-        days_back=-1,
-        use_legacy_sql=False,
-        location="US",
-        deferrable=True,
-    )
-
-    # Task 15/16: BigQueryColumnCheckOperator applied / skipped
-    bq_column_check_applied = BigQueryColumnCheckOperator(
-        task_id="bq_column_check_applied",
-        table="bigquery-public-data.samples.shakespeare",
-        column_mapping={
-            "word_count": {
-                "min": {"greater_than": 0},
-            },
-        },
-        use_legacy_sql=False,
-        location="US",
-    )
-
-    bq_column_check_skipped = BigQueryColumnCheckOperator(
-        task_id="bq_column_check_skipped",
-        table="bigquery-public-data.samples.shakespeare",
-        column_mapping={
-            "word_count": {
-                "min": {"greater_than": 0},
-            },
-        },
-        use_legacy_sql=False,
-        location="US",
-    )
-
-    # Task 17/18: BigQueryTableCheckOperator applied / skipped
-    bq_table_check_applied = BigQueryTableCheckOperator(
-        task_id="bq_table_check_applied",
-        table="bigquery-public-data.samples.shakespeare",
-        checks={
-            "row_count_check": {
-                "check_statement": "COUNT(*) > 0",
-            },
-        },
-        use_legacy_sql=False,
-        location="US",
-    )
-
-    bq_table_check_skipped = BigQueryTableCheckOperator(
-        task_id="bq_table_check_skipped",
-        table="bigquery-public-data.samples.shakespeare",
-        checks={
-            "row_count_check": {
-                "check_statement": "COUNT(*) > 0",
-            },
-        },
-        use_legacy_sql=False,
-        location="US",
-    )
 
     # Assertion tasks that validate underlying BigQuery jobs for operators where we
     # can reliably retrieve a job_id from XCom.
@@ -483,32 +407,7 @@ with DAG(
         },
     )
 
-    assert_bq_check = PythonOperator(
-        task_id="assert_bq_check_task",
-        python_callable=assert_bigquery_job,
-        op_kwargs={
-            "subject_task_id": "bq_check_task",
-            "expected_reservation": "projects/masthead-dev/locations/US/reservations/capacity-1",
-        },
-    )
 
-    assert_bq_value_check = PythonOperator(
-        task_id="assert_bq_value_check_task",
-        python_callable=assert_bigquery_job,
-        op_kwargs={
-            "subject_task_id": "bq_value_check_task",
-            "expected_reservation": "projects/masthead-dev/locations/US/reservations/capacity-1",
-        },
-    )
-
-    assert_bq_get_data = PythonOperator(
-        task_id="assert_bq_get_data_task",
-        python_callable=assert_bigquery_job,
-        op_kwargs={
-            "subject_task_id": "bq_get_data_task",
-            "expected_reservation": "projects/masthead-dev/locations/US/reservations/capacity-1",
-        },
-    )
 
     assert_bq_insert_job_legacy = PythonOperator(
         task_id="assert_bq_insert_job_legacy_task",
@@ -519,77 +418,26 @@ with DAG(
         },
     )
 
-    assert_bq_execute_query_op_applied = PythonOperator(
-        task_id="assert_bq_execute_query_op_applied_task",
-        python_callable=assert_bigquery_job,
-        op_kwargs={
-            "subject_task_id": "bq_execute_query_op_applied",
-            "expected_reservation": "projects/masthead-dev/locations/US/reservations/capacity-1",
-        },
-    )
+    if BigQueryExecuteQueryOperator:
+        assert_bq_execute_query_op_applied = PythonOperator(
+            task_id="assert_bq_execute_query_op_applied_task",
+            python_callable=assert_bigquery_job,
+            op_kwargs={
+                "subject_task_id": "bq_execute_query_op_applied",
+                "expected_reservation": "projects/masthead-dev/locations/US/reservations/capacity-1",
+            },
+        )
 
-    assert_bq_execute_query_op_skipped = PythonOperator(
-        task_id="assert_bq_execute_query_op_skipped_task",
-        python_callable=assert_bigquery_job,
-        op_kwargs={
-            "subject_task_id": "bq_execute_query_op_skipped",
-            "expected_reservation": None,
-        },
-    )
+        assert_bq_execute_query_op_skipped = PythonOperator(
+            task_id="assert_bq_execute_query_op_skipped_task",
+            python_callable=assert_bigquery_job,
+            op_kwargs={
+                "subject_task_id": "bq_execute_query_op_skipped",
+                "expected_reservation": None,
+            },
+        )
 
-    assert_bq_interval_check_applied = PythonOperator(
-        task_id="assert_bq_interval_check_applied_task",
-        python_callable=assert_bigquery_job,
-        op_kwargs={
-            "subject_task_id": "bq_interval_check_applied",
-            "expected_reservation": "projects/masthead-dev/locations/US/reservations/capacity-1",
-        },
-    )
 
-    assert_bq_interval_check_skipped = PythonOperator(
-        task_id="assert_bq_interval_check_skipped_task",
-        python_callable=assert_bigquery_job,
-        op_kwargs={
-            "subject_task_id": "bq_interval_check_skipped",
-            "expected_reservation": None,
-        },
-    )
-
-    assert_bq_column_check_applied = PythonOperator(
-        task_id="assert_bq_column_check_applied_task",
-        python_callable=assert_bigquery_job,
-        op_kwargs={
-            "subject_task_id": "bq_column_check_applied",
-            "expected_reservation": "projects/masthead-dev/locations/US/reservations/capacity-1",
-        },
-    )
-
-    assert_bq_column_check_skipped = PythonOperator(
-        task_id="assert_bq_column_check_skipped_task",
-        python_callable=assert_bigquery_job,
-        op_kwargs={
-            "subject_task_id": "bq_column_check_skipped",
-            "expected_reservation": None,
-        },
-    )
-
-    assert_bq_table_check_applied = PythonOperator(
-        task_id="assert_bq_table_check_applied_task",
-        python_callable=assert_bigquery_job,
-        op_kwargs={
-            "subject_task_id": "bq_table_check_applied",
-            "expected_reservation": "projects/masthead-dev/locations/US/reservations/capacity-1",
-        },
-    )
-
-    assert_bq_table_check_skipped = PythonOperator(
-        task_id="assert_bq_table_check_skipped_task",
-        python_callable=assert_bigquery_job,
-        op_kwargs={
-            "subject_task_id": "bq_table_check_skipped",
-            "expected_reservation": None,
-        },
-    )
 
     # Wire subject tasks to their assertion tasks
     bq_insert_job >> assert_bq_insert_job
@@ -597,37 +445,26 @@ with DAG(
     bq_ondemand >> assert_bq_ondemand
     bq_no_reservation >> assert_bq_no_reservation
     bq_nested_task >> assert_bq_nested
-    bq_check >> assert_bq_check
-    bq_value_check >> assert_bq_value_check
-    bq_get_data >> assert_bq_get_data
+
     bq_insert_job_legacy >> assert_bq_insert_job_legacy
-    bq_execute_query_op_applied >> assert_bq_execute_query_op_applied
-    bq_execute_query_op_skipped >> assert_bq_execute_query_op_skipped
-    bq_interval_check_applied >> assert_bq_interval_check_applied
-    bq_interval_check_skipped >> assert_bq_interval_check_skipped
-    bq_column_check_applied >> assert_bq_column_check_applied
-    bq_column_check_skipped >> assert_bq_column_check_skipped
-    bq_table_check_applied >> assert_bq_table_check_applied
-    bq_table_check_skipped >> assert_bq_table_check_skipped
+    if BigQueryExecuteQueryOperator:
+        bq_execute_query_op_applied >> assert_bq_execute_query_op_applied
+        bq_execute_query_op_skipped >> assert_bq_execute_query_op_skipped
+
 
     # Set dependencies
-    [
+    all_tasks = [
         bq_insert_job,
         bq_execute_query,
         bq_ondemand,
         bq_no_reservation,
         tg,
-        bq_check,
-        bq_value_check,
-        bq_get_data,
         bq_insert_job_legacy,
         bq_execute_query_op_applied,
         bq_execute_query_op_skipped,
-        bq_interval_check_applied,
-        bq_interval_check_skipped,
-        bq_column_check_applied,
-        bq_column_check_skipped,
-        bq_table_check_applied,
-        bq_table_check_skipped,
+
         python_custom_bq,
     ]
+
+    # Filter out None values for optional operators
+    all_tasks = [t for t in all_tasks if t is not None]

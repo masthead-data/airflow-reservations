@@ -85,16 +85,6 @@ Each test run now verifies reservation behavior for all supported BigQuery opera
 - **BigQueryExecuteQueryOperator**
   - `bq_execute_query_op_applied`: re-assigned to configured reservation
   - `bq_execute_query_op_skipped`: pre-existing reservation, policy skip verified
-- **BigQueryCheckOperator / BigQueryValueCheckOperator**
-  - `bq_check_task`, `bq_value_check_task`: safety checks that ensure no SQL-based injection is applied
-- **BigQueryGetDataOperator**
-  - `bq_get_data_task`: data fetch using public dataset with reservation-aware policy handling
-- **BigQueryIntervalCheckOperator**
-  - `bq_interval_check_applied`, `bq_interval_check_skipped`: interval checks run without unsafe SQL injection
-- **BigQueryColumnCheckOperator**
-  - `bq_column_check_applied`, `bq_column_check_skipped`: column checks on a public table with safe execution
-- **BigQueryTableCheckOperator**
-  - `bq_table_check_applied`, `bq_table_check_skipped`: table-level checks with safe execution
 
 For operators where a BigQuery `job_id` can be retrieved, the DAG includes downstream assertion
 tasks that verify the corresponding BigQuery job completed successfully (and, where possible,

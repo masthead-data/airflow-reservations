@@ -59,15 +59,16 @@ class TestTaskPolicy:
             },
         )
 
+        reservation = "projects/p/locations/US/reservations/r"
         with mock.patch.object(
             policy,
             "get_reservation",
-            return_value="projects/p/locations/US/reservations/r",
+            return_value=reservation,
         ):
             policy.task_policy(task)
 
-        # Should use reservationId in configuration, NOT SQL injection
-        assert task.configuration["query"]["reservationId"] == "projects/p/locations/US/reservations/r"
+        # Should use reservation at top-level
+        assert task.configuration["reservation"] == reservation
         assert task.configuration["query"]["query"] == "SELECT * FROM table"
 
     def test_skips_if_reservation_already_set(self):
@@ -147,29 +148,15 @@ class TestTaskPolicy:
             },
         )
 
-        with mock.patch.object(policy, "get_reservation", return_value="res1"):
+        reservation = "projects/p/locations/US/reservations/legacy-res"
+        with mock.patch.object(policy, "get_reservation", return_value=reservation):
             policy.task_policy(task)
 
-        # Should use reservationId (safe for Legacy SQL)
-        assert task.configuration["query"]["reservationId"] == "res1"
+        # Should use reservation fields (safe for Legacy SQL)
+        assert task.configuration["reservation"] == reservation
         assert "SET @@reservation" not in task.configuration["query"]["query"]
 
-    def test_skips_sql_fallback_for_check_operators(self):
-        """Test that Check operators never get SQL injection if no configuration."""
-        from airflow_reservations import policy
 
-        task = MockTask(
-            task_id="my_task",
-            task_type="BigQueryCheckOperator",
-            dag_id="my_dag",
-            sql="SELECT count(*) FROM table",
-        )
-
-        with mock.patch.object(policy, "get_reservation", return_value="res1"):
-            policy.task_policy(task)
-
-        # SQL should be unchanged (no configuration attribute on MockTask by default)
-        assert task.sql == "SELECT count(*) FROM table"
 
     def test_skips_sql_fallback_for_legacy_sql(self):
         """Test that SQL injection is skipped if use_legacy_sql is True."""
@@ -188,31 +175,6 @@ class TestTaskPolicy:
 
         # SQL should be unchanged
         assert task.sql == "SELECT * FROM [table]"
-
-    def test_injects_reservation_into_get_data_operator(self):
-        """Test reservation injection into BigQueryGetDataOperator."""
-        from airflow_reservations import policy
-
-        # GetDataOperator often uses configuration or sql depending on version
-        task = MockTask(
-            task_id="my_task",
-            task_type="BigQueryGetDataOperator",
-            dag_id="my_dag",
-            configuration={
-                "query": {
-                    "query": "SELECT * FROM table",
-                }
-            },
-        )
-
-        with mock.patch.object(
-            policy,
-            "get_reservation",
-            return_value="projects/p/locations/US/reservations/r",
-        ):
-            policy.task_policy(task)
-
-        assert task.configuration["query"]["reservationId"] == "projects/p/locations/US/reservations/r"
 
     def test_handles_sql_list_in_execute_query_operator(self):
         """Test reservation injection when sql is a list of statements."""

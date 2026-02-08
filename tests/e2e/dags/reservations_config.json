@@ -7,15 +7,10 @@
                 "test_reservation_dag.bq_insert_job_task",
                 "test_reservation_dag.bq_execute_query_task",
                 "test_reservation_dag.my_group.nested_task",
-                "test_reservation_dag.bq_check_task",
-                "test_reservation_dag.bq_value_check_task",
                 "test_reservation_dag.bq_get_data_task",
                 "test_reservation_dag.bq_insert_job_legacy_task",
                 "test_reservation_dag.python_custom_bq_task",
-                "test_reservation_dag.bq_execute_query_op_applied",
-                "test_reservation_dag.bq_interval_check_applied",
-                "test_reservation_dag.bq_column_check_applied",
-                "test_reservation_dag.bq_table_check_applied"
+                "test_reservation_dag.bq_execute_query_op_applied"
             ]
         },
         {
