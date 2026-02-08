@@ -31,6 +31,47 @@ BIGQUERY_OPERATOR_TYPES = frozenset(
 )
 
 
+def _init_debug_info():
+    """One-time informational check for environment compatibility."""
+    import airflow
+    from google.cloud import bigquery
+
+    # Check for operators
+    ops_found = []
+    try:
+        from airflow.providers.google.cloud.operators.bigquery import (
+            BigQueryInsertJobOperator,
+        )
+
+        ops_found.append("BigQueryInsertJobOperator")
+    except ImportError:
+        pass
+
+    try:
+        from airflow.providers.google.cloud.operators.bigquery import (
+            BigQueryExecuteQueryOperator,
+        )
+
+        ops_found.append("BigQueryExecuteQueryOperator")
+    except ImportError:
+        pass
+
+    # Check for reservation field support in bigquery library
+    # The property was added in google-cloud-bigquery 3.1.0
+    has_reservation_field = hasattr(bigquery.QueryJobConfig, "reservation")
+
+    logger.info(
+        "Airflow Reservations Initialized: [Airflow %s] [BigQuery Library Reservation Support: %s] [Detected Operators: %s]",
+        airflow.__version__,
+        has_reservation_field,
+        ", ".join(ops_found) if ops_found else "None",
+    )
+
+
+# Executed when module is loaded
+_init_debug_info()
+
+
 def _get_task_identifiers(task: BaseOperator) -> tuple[str, str]:
     """Extract dag_id and task_id from a task.
 
@@ -78,6 +119,7 @@ def _inject_reservation_into_configuration(
     if not isinstance(configuration, dict):
         logger.debug("Task %s configuration is not a dict", task.task_id)
         return False
+
 
     # 1. Set 'reservation' at the top level of JobConfiguration (Standard BigQuery API)
     # This is the most robust way to set the reservation for any job type.
@@ -137,8 +179,6 @@ def _inject_reservation_into_sql_attribute(
 
     # Handle both string and list of strings
     if isinstance(original_sql, str):
-        if "SET @@reservation" in original_sql:
-            return False
 
         reservation_sql = format_reservation_sql(reservation)
         task.sql = reservation_sql + original_sql

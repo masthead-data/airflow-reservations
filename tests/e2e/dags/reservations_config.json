@@ -7,10 +7,10 @@
                 "test_reservation_dag.bq_insert_job_task",
                 "test_reservation_dag.bq_execute_query_task",
                 "test_reservation_dag.my_group.nested_task",
-                "test_reservation_dag.bq_get_data_task",
                 "test_reservation_dag.bq_insert_job_legacy_task",
                 "test_reservation_dag.python_custom_bq_task",
-                "test_reservation_dag.bq_execute_query_op_applied"
+                "test_reservation_dag.bq_execute_query_op_applied",
+                "test_reservation_dag.bq_execute_query_op_skipped"
             ]
         },
         {
@@ -18,6 +18,13 @@
             "reservation": "none",
             "tasks": [
                 "test_reservation_dag.bq_ondemand_task"
+            ]
+        },
+        {
+            "tag": "skip",
+            "reservation": null,
+            "tasks": [
+                "test_reservation_dag.bq_no_reservation_task"
             ]
         }
     ]

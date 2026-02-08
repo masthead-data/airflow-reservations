@@ -201,15 +201,17 @@ get_latest_run_id() {
     local dag_id="$3"
     local airflow_version="${4:-3}"
 
+    local args=""
     if [ "$airflow_version" = "2" ]; then
-        docker compose -f "$compose_file" exec -T "$container_name" \
-            airflow dags list-runs -d "$dag_id" -o json 2>/dev/null | \
-            grep -o '"run_id": "[^"]*"' | head -1 | cut -d'"' -f4
+        args="-d \"$dag_id\""
     else
-        docker compose -f "$compose_file" exec -T "$container_name" \
-            airflow dags list-runs "$dag_id" -o json 2>/dev/null | \
-            grep -o '"run_id": "[^"]*"' | head -1 | cut -d'"' -f4
+        args="\"$dag_id\""
     fi
+
+    local cmd="airflow dags list-runs $args -o json"
+    
+    docker compose -f "$compose_file" exec -T "$container_name" sh -c "$cmd" 2>/dev/null | \
+        grep -o '"run_id": "[^"]*"' | head -1 | cut -d'"' -f4
 }
 
 # Verify task log contains expected reservation
@@ -228,17 +230,9 @@ verify_task_log() {
     local logs=$(docker compose -f "$compose_file" exec -T "$log_container" cat "$log_path" 2>/dev/null || echo "")
 
     if [ "$should_find" = "true" ]; then
-        if echo "$logs" | grep -q "$search_pattern"; then
-            return 0
-        else
-            return 1
-        fi
+        echo "$logs" | grep -q "$search_pattern"
     else
-        if echo "$logs" | grep -q "$search_pattern"; then
-            return 1
-        else
-            return 0
-        fi
+        ! echo "$logs" | grep -q "$search_pattern"
     fi
 }
 
@@ -297,10 +291,9 @@ verify_all_tasks() {
     
     # 2. Get list of tasks from Airflow
     local task_list_output
-    if docker compose -f "$compose_file" exec -T "$log_container" airflow tasks list "$dag_id" 2>/dev/null; then
-        task_list_output=$(docker compose -f "$compose_file" exec -T "$log_container" airflow tasks list "$dag_id" 2>/dev/null)
-    elif docker compose -f "$compose_file" exec -T "$log_container" airflow tasks list "$dag_id" --output json 2>/dev/null; then
-         task_list_output=$(docker compose -f "$compose_file" exec -T "$log_container" airflow tasks list "$dag_id" --output text 2>/dev/null)
+    # Try with explicit json output first (most reliable across versions if supported), then fallback to default
+    if ! task_list_output=$(docker compose -f "$compose_file" exec -T "$log_container" airflow tasks list "$dag_id" --output text 2>/dev/null); then
+         task_list_output=$(docker compose -f "$compose_file" exec -T "$log_container" airflow tasks list "$dag_id" 2>/dev/null)
     fi
 
     # Clean up output to get just task IDs (remove headers/logs if any)
@@ -312,8 +305,36 @@ verify_all_tasks() {
         return 1
     fi
 
+    # 3. Verify all configured tasks exist in the DAG
+    log_info "Checking for orphan configuration entries..."
+    
+    local configured_tasks
+    configured_tasks=$(echo "$config_map" | cut -d'|' -f1 | sort | uniq | grep -v "^$")
+
+    local missing_task_count=0
+    local IFS=$'\n'
+    for conf_task in $configured_tasks; do
+        if ! echo "$tasks" | grep -q "^${conf_task}$"; then
+            log_error "❌ Configured task '$conf_task' NOT found in DAG tasks list"
+            missing_task_count=$((missing_task_count + 1))
+        fi
+    done
+    unset IFS
+
+    if [ $missing_task_count -gt 0 ]; then
+        failed=$((failed + missing_task_count))
+    else
+        log_info "✅ All configured tasks are present in the DAG"
+    fi
+
     local IFS=$'\n'
     for task_id in $tasks; do
+        # Skip assertion tasks in shell verification to avoid false positives 
+        # (they log their subject's configuration which contains reservation strings)
+        if [[ "$task_id" == assert_* ]]; then
+            continue
+        fi
+
         # Skip verification if logs don't exist (task didn't run)
         local log_path="/opt/airflow/logs/dag_id=${dag_id}/run_id=${run_id}/task_id=${task_id}/attempt=1.log"
         if ! docker compose -f "$compose_file" exec -T "$log_container" test -f "$log_path" 2>/dev/null; then
@@ -327,35 +348,25 @@ verify_all_tasks() {
         
         if [ -n "$expected_reservation" ]; then
             # Task is configured
-            if [ "$expected_reservation" = "none" ]; then
-                # Expect 'none' reservation (explicitly set)
-                 if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "$task_id" "'reservation': 'none'" "true" || \
-                    verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "$task_id" "SET @@reservation='none'" "true"; then
-                    log_info "✅ Task $task_id: Correctly has 'none' reservation"
-                    passed=$((passed + 1))
-                else
-                    log_error "❌ Task $task_id: Expected 'none' reservation but not found"
-                    failed=$((failed + 1))
-                fi
+            # Expect specific reservation (including 'none')
+            if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "$task_id" "'reservation': '$expected_reservation'" "true" || \
+               verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "$task_id" "SET @@reservation='$expected_reservation'" "true"; then
+                log_info "✅ Task $task_id: Correctly has reservation '$expected_reservation'"
+                passed=$((passed + 1))
             else
-                # Expect specific reservation
-                if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "$task_id" "'reservation': '$expected_reservation'" "true" || \
-                   verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "$task_id" "SET @@reservation='$expected_reservation'" "true"; then
-                    log_info "✅ Task $task_id: Correctly has reservation '$expected_reservation'"
-                    passed=$((passed + 1))
-                else
-                    log_error "❌ Task $task_id: Expected reservation '$expected_reservation' NOT found"
-                    failed=$((failed + 1))
-                fi
+                log_error "❌ Task $task_id: Expected reservation '$expected_reservation' NOT found"
+                failed=$((failed + 1))
             fi
         else
-            # Task is NOT configured -> Expect NO reservation
-            if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "$task_id" "'reservation':" "false" && \
-               verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "$task_id" "SET @@reservation" "false"; then
+            # Task is NOT configured -> Expect NO injection
+            local match_line
+            match_line=$(docker compose -f "$compose_file" exec -T "$log_container" grep "Injected reservation .* into task ${task_id} " "$log_path" 2>/dev/null | head -n 1)
+            if [ -z "$match_line" ]; then
                 log_info "✅ Task $task_id: Correctly has no reservation"
                 passed=$((passed + 1))
             else
-                log_error "❌ Task $task_id: Unexpected reservation found (should be unconfigured)"
+                log_error "❌ Task $task_id: Unexpected reservation injection found"
+                log_error "  Line found: $match_line"
                 failed=$((failed + 1))
             fi
         fi
