@@ -39,6 +39,9 @@ lint:
 format:
 	.venv/bin/python -m black src/ tests/
 
+build:
+	.venv/bin/python -m hatch build
+
 e2e: e2e-airflow2 e2e-airflow3
 	@echo ""
 	@echo "✅ All E2E tests passed for both Airflow 2.x and 3.x!"
