@@ -16,17 +16,13 @@ This package integrates with Airflow's [Cluster Policies](https://airflow.apache
 
 ## Installation
 
-```bash
-pip install airflow-reservations
-```
-
-Or add to your `requirements.txt`:
+Add to your `requirements.txt`:
 
 ```text
-airflow-reservations=0.1.1
+airflow-reservations=X.Y.Z
 ```
 
-The policy is automatically registered via Airflow's plugin entrypoint system (requires Airflow 2.6+).
+The policy is automatically registered via Airflow's plugin entrypoint system.
 
 ## Configuration
 
