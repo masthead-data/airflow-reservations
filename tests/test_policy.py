@@ -12,13 +12,13 @@ class MockTask:
         task_type: str,
         dag_id: str = "test_dag",
         configuration: dict = None,
-        sql: str = None,
+        api_resource_configs: dict = None,
     ):
         self.task_id = task_id
         self.task_type = task_type
         self.dag_id = dag_id
         self.configuration = configuration
-        self.sql = sql
+        self.api_resource_configs = api_resource_configs
         self.dag = None
 
 
@@ -31,15 +31,17 @@ class TestTaskPolicy:
 
         task = MockTask(
             task_id="my_task",
-            task_type="PythonOperator",
-            configuration={"query": {"query": "SELECT 1"}},
+            task_type="CustomOperator",
+            configuration={},
+            api_resource_configs={},
         )
 
         with mock.patch.object(policy, "get_reservation", return_value="res1"):
             policy.task_policy(task)
 
-        # Configuration should be unchanged
-        assert task.configuration["query"]["query"] == "SELECT 1"
+        # Should not inject reservation into non-BigQuery operators
+        assert "reservation" not in task.configuration
+        assert "reservation" not in task.api_resource_configs
 
     def test_injects_reservation_into_insert_job_operator(self):
         """Test reservation injection into BigQueryInsertJobOperator."""
@@ -52,41 +54,39 @@ class TestTaskPolicy:
             configuration={
                 "query": {
                     "query": "SELECT * FROM table",
-                    "useLegacySql": False,
                 }
             },
         )
 
+        reservation = "projects/p/locations/US/reservations/r"
         with mock.patch.object(
             policy,
             "get_reservation",
-            return_value="projects/p/locations/US/reservations/r",
+            return_value=reservation,
         ):
             policy.task_policy(task)
 
-        expected_sql = (
-            "SET @@reservation='projects/p/locations/US/reservations/r';\n"
-            "SELECT * FROM table"
-        )
-        assert task.configuration["query"]["query"] == expected_sql
+        assert task.configuration["reservation"] == reservation
 
-    def test_skips_if_reservation_already_set(self):
+    def test_rewrites_existing_reservation(self):
         """Test that existing reservation statements are not duplicated."""
         from airflow_reservations import policy
 
-        original_sql = "SET @@reservation='existing';\nSELECT 1"
+        reservation = "projects/p/locations/US/reservations/r"
         task = MockTask(
             task_id="my_task",
             task_type="BigQueryInsertJobOperator",
             dag_id="my_dag",
-            configuration={"query": {"query": original_sql}},
+            configuration={
+                "query": {"query": "SELECT 1"},
+                "reservation": "projects/p/locations/US/reservations/m",
+            },
         )
 
-        with mock.patch.object(policy, "get_reservation", return_value="new_res"):
+        with mock.patch.object(policy, "get_reservation", return_value=reservation):
             policy.task_policy(task)
 
-        # SQL should be unchanged
-        assert task.configuration["query"]["query"] == original_sql
+        assert task.configuration["reservation"] == reservation
 
     def test_no_injection_without_matching_config(self):
         """Test that tasks without config entries are not modified."""
@@ -103,8 +103,7 @@ class TestTaskPolicy:
         with mock.patch.object(policy, "get_reservation", return_value=None):
             policy.task_policy(task)
 
-        # SQL should be unchanged
-        assert task.configuration["query"]["query"] == original_sql
+        assert "reservation" not in task.configuration
 
     def test_injects_reservation_into_execute_query_operator(self):
         """Test reservation injection into BigQueryExecuteQueryOperator."""
@@ -114,45 +113,19 @@ class TestTaskPolicy:
             task_id="my_task",
             task_type="BigQueryExecuteQueryOperator",
             dag_id="my_dag",
-            sql="SELECT * FROM table",
+            api_resource_configs={},
         )
 
+        reservation = "projects/p/locations/US/reservations/r"
         with mock.patch.object(
             policy,
             "get_reservation",
-            return_value="projects/p/locations/US/reservations/r",
+            return_value=reservation,
         ):
             policy.task_policy(task)
 
-        expected_sql = (
-            "SET @@reservation='projects/p/locations/US/reservations/r';\n"
-            "SELECT * FROM table"
-        )
-        assert task.sql == expected_sql
-
-    def test_handles_sql_list_in_execute_query_operator(self):
-        """Test reservation injection when sql is a list of statements."""
-        from airflow_reservations import policy
-
-        task = MockTask(
-            task_id="my_task",
-            task_type="BigQueryExecuteQueryOperator",
-            dag_id="my_dag",
-            sql=["SELECT 1", "SELECT 2"],
-        )
-
-        with mock.patch.object(
-            policy,
-            "get_reservation",
-            return_value="projects/p/locations/US/reservations/r",
-        ):
-            policy.task_policy(task)
-
-        # First statement should have reservation prepended
-        assert task.sql[0].startswith("SET @@reservation")
-        assert "SELECT 1" in task.sql[0]
-        # Second statement unchanged
-        assert task.sql[1] == "SELECT 2"
+        # Should use api_resource_configs for ExecuteQueryOperator
+        assert task.api_resource_configs["reservation"] == reservation
 
 
 class TestGetTaskIdentifiers:

@@ -244,15 +244,3 @@ def get_reservation_entry(dag_id: str, task_id: str) -> dict[str, Any] | None:
                 return entry
 
     return None
-
-
-def format_reservation_sql(reservation_id: str) -> str:
-    """Format the SQL statement to set a reservation.
-
-    Args:
-        reservation_id: The full reservation path or "none" for on-demand.
-
-    Returns:
-        SQL SET statement for the reservation.
-    """
-    return f"SET @@reservation='{reservation_id}';\n"

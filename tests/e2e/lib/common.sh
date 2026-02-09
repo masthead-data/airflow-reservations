@@ -144,24 +144,37 @@ wait_for_dag_completion() {
                 fi
 
                 # Show logs for failed tasks
-                log_info "Fetching logs for failed tasks..."
+                log_info "Fetching logs for all failed tasks..."
                 local log_path="/opt/airflow/logs/dag_id=${dag_id}/run_id=${run_id}"
 
                 # First, check if log directory exists
                 if ! docker compose -f "$compose_file" exec -T "$container_name" test -d "$log_path" 2>/dev/null; then
                     log_error "Log directory not found: $log_path"
-                    log_info "Tasks failed during initialization (no start_date). Checking scheduler logs..."
-                    # Show last 100 lines and filter for relevant errors
+                    log_info "Determining why initialization failed..."
                     docker compose -f "$compose_file" logs --tail=100 2>&1 | grep -B 5 -A 10 -E "(ERROR|Exception|Traceback|Failed)" | tail -80
                 else
-                    # Try to show at least the first failed task's log
-                    local first_log=$(docker compose -f "$compose_file" exec -T "$container_name" \
-                        find "$log_path" -name "*.log" -type f 2>/dev/null | head -1)
-                    if [ -n "$first_log" ]; then
-                        log_info "=== Sample failed task log: $first_log ==="
-                        docker compose -f "$compose_file" exec -T "$container_name" cat "$first_log" 2>/dev/null | tail -50
+                    # Find and display logs for all tasks that didn't succeed
+                    # We first get the list of non-success tasks
+                    local failed_tasks=$(docker compose -f "$compose_file" exec -T "$container_name" \
+                        airflow tasks states-for-dag-run "$dag_id" "$run_id" 2>/dev/null | grep -E "(failed|upstream_failed|skipped|retry)" | awk '{print $5}')
+
+                    if [ -z "$failed_tasks" ]; then
+                         # Fallback if the command above failed or returned nothing
+                         log_info "Could not determine failed tasks list. Showing all available task logs."
+                         for log_file in $(docker compose -f "$compose_file" exec -T "$container_name" find "$log_path" -name "*.log" -type f); do
+                            log_info "=== Log for $log_file ==="
+                            docker compose -f "$compose_file" exec -T "$container_name" cat "$log_file" | tail -50
+                         done
                     else
-                        log_error "No log files found in $log_path"
+                        for task in $failed_tasks; do
+                            log_info "=== Logs for failed task: $task ==="
+                            # Find all attempts for this task
+                            local task_logs=$(docker compose -f "$compose_file" exec -T "$container_name" \
+                                find "$log_path" -name "task_id=${task}*" -type d 2>/dev/null)
+                            for tlog in $task_logs; do
+                                docker compose -f "$compose_file" exec -T "$container_name" find "$tlog" -name "*.log" -type f -exec echo "--- Log file: {} ---" \; -exec cat {} \; | tail -100
+                            done
+                        done
                     fi
                 fi
 
@@ -188,15 +201,17 @@ get_latest_run_id() {
     local dag_id="$3"
     local airflow_version="${4:-3}"
 
+    local args=""
     if [ "$airflow_version" = "2" ]; then
-        docker compose -f "$compose_file" exec -T "$container_name" \
-            airflow dags list-runs -d "$dag_id" -o json 2>/dev/null | \
-            grep -o '"run_id": "[^"]*"' | head -1 | cut -d'"' -f4
+        args="-d \"$dag_id\""
     else
-        docker compose -f "$compose_file" exec -T "$container_name" \
-            airflow dags list-runs "$dag_id" -o json 2>/dev/null | \
-            grep -o '"run_id": "[^"]*"' | head -1 | cut -d'"' -f4
+        args="\"$dag_id\""
     fi
+
+    local cmd="airflow dags list-runs $args -o json"
+
+    docker compose -f "$compose_file" exec -T "$container_name" sh -c "$cmd" 2>/dev/null | \
+        grep -o '"run_id": "[^"]*"' | head -1 | cut -d'"' -f4
 }
 
 # Verify task log contains expected reservation
@@ -215,100 +230,158 @@ verify_task_log() {
     local logs=$(docker compose -f "$compose_file" exec -T "$log_container" cat "$log_path" 2>/dev/null || echo "")
 
     if [ "$should_find" = "true" ]; then
-        if echo "$logs" | grep -q "$search_pattern"; then
-            return 0
-        else
-            return 1
-        fi
+        echo "$logs" | grep -q "$search_pattern"
     else
-        if echo "$logs" | grep -q "$search_pattern"; then
-            return 1
-        else
-            return 0
-        fi
+        ! echo "$logs" | grep -q "$search_pattern"
     fi
 }
 
 # Run verification for all standard test tasks
 # Args: $1 = compose_file, $2 = log_container, $3 = dag_id, $4 = run_id
 # Returns: number of failed tests
+# Parse configuration file
+parse_config() {
+    local config_file="$1"
+    if ! command -v jq &> /dev/null; then
+        log_error "jq is required but not installed."
+        return 1
+    fi
+
+    # Extract mappings: task_id -> output_line (reservation|tag)
+    # We strip the DAG ID prefix (assuming format dag_id.task_id) to match Airflow task IDs
+    jq -r '.reservation_config[] | .reservation as $res | .tasks[] | sub("^[^.]*\\."; "") + "|" + $res' "$config_file"
+}
+
+# Run verification for all tasks based on configuration
+# Args: $1 = compose_file, $2 = log_container, $3 = dag_id, $4 = run_id, $5 = config_file, $6 = airflow_version (optional, 2 or 3, default 3)
+# Returns: number of failed tests
 verify_all_tasks() {
     local compose_file="$1"
     local log_container="$2"
     local dag_id="$3"
     local run_id="$4"
+    local config_file="${5:-../dags/reservations_config.json}" # Default path if not provided
+    local airflow_version="${6:-3}"
     local passed=0
     local failed=0
 
+    # Locate config file relative to script if needed
+    if [ ! -f "$config_file" ]; then
+        # Try finding it relative to current script directory if the path is relative
+        local script_dir=$(dirname "${BASH_SOURCE[0]}")
+        local alt_config_file="$script_dir/$config_file"
+        if [ -f "$alt_config_file" ]; then
+            config_file="$alt_config_file"
+        else
+            log_error "Configuration file not found: $config_file"
+            return 1
+        fi
+    fi
+
     log_info "=========================================="
     log_info "Verifying reservation injection..."
+    log_info "Using config: $config_file"
     log_info "=========================================="
 
-    # Task 1: Should have reservation path in SQL
-    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_insert_job_task" "SET @@reservation='projects/masthead-dev/locations/US/reservations/capacity-1'" "true"; then
-        log_info "✅ Task 1: Reservation injected into BigQueryInsertJobOperator"
-        passed=$((passed + 1))
-    else
-        log_error "❌ Task 1: Reservation NOT found in BigQueryInsertJobOperator"
-        failed=$((failed + 1))
+    # 1. Parse configuration into a map (task_id -> reservation)
+    # Parsing into a string with newlines is easiest.
+    local config_map
+    if ! config_map=$(parse_config "$config_file"); then
+         return 1
     fi
 
-    # Task 2: Should have reservation path in SQL
-    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_execute_query_task" "SET @@reservation='projects/masthead-dev/locations/US/reservations/capacity-1'" "true"; then
-        log_info "✅ Task 2: Reservation injected into BigQueryExecuteQueryOperator"
-        passed=$((passed + 1))
-    else
-        log_error "❌ Task 2: Reservation NOT found in BigQueryExecuteQueryOperator"
-        failed=$((failed + 1))
+    # 2. Get list of tasks from Airflow
+    local task_list_output
+    # Try with explicit json output first (most reliable across versions if supported), then fallback to default
+    if ! task_list_output=$(docker compose -f "$compose_file" exec -T "$log_container" airflow tasks list "$dag_id" --output text 2>/dev/null); then
+         task_list_output=$(docker compose -f "$compose_file" exec -T "$log_container" airflow tasks list "$dag_id" 2>/dev/null)
     fi
 
-    # Task 3: Should have 'none' for on-demand
-    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_ondemand_task" "SET @@reservation='none'" "true"; then
-        log_info "✅ Task 3: On-demand reservation ('none') injected"
-        passed=$((passed + 1))
-    else
-        log_error "❌ Task 3: On-demand reservation NOT found"
-        failed=$((failed + 1))
+    # Clean up output to get just task IDs (remove headers/logs if any)
+    local tasks
+    tasks=$(echo "$task_list_output" | grep -E "^[a-zA-Z0-9_.]+$" | sort)
+
+    if [ -z "$tasks" ]; then
+        log_error "Failed to retrieve task list for DAG $dag_id"
+        return 1
     fi
 
-    # Task 4: Should NOT have reservation (not in config)
-    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_no_reservation_task" "SET @@reservation" "false"; then
-        log_info "✅ Task 4: Correctly has no reservation"
-        passed=$((passed + 1))
-    else
-        log_error "❌ Task 4: Unexpected reservation found"
-        failed=$((failed + 1))
-    fi
+    # 3. Verify all configured tasks exist in the DAG
+    log_info "Checking for orphan configuration entries..."
 
-    # Task 5: Nested task should have reservation
-    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "my_group.nested_task" "SET @@reservation='projects/masthead-dev/locations/US/reservations/capacity-1'" "true"; then
-        log_info "✅ Task 5: Nested task reservation injected"
-        passed=$((passed + 1))
-    else
-        log_error "❌ Task 5: Nested task reservation NOT found"
-        failed=$((failed + 1))
-    fi
+    local configured_tasks
+    configured_tasks=$(echo "$config_map" | cut -d'|' -f1 | sort | uniq | grep -v "^$")
 
-    # Task 6: BigQueryCheckOperator should have reservation
-    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "bq_check_task" "SET @@reservation='projects/masthead-dev/locations/US/reservations/capacity-1'" "true"; then
-        log_info "✅ Task 6: BigQueryCheckOperator has reservation"
-        passed=$((passed + 1))
-    else
-        log_error "❌ Task 6: BigQueryCheckOperator reservation NOT found"
-        failed=$((failed + 1))
-    fi
+    local IFS=$'\n'
+    for conf_task in $configured_tasks; do
+        if ! echo "$tasks" | grep -q "^${conf_task}$"; then
+            if [[ "$conf_task" == test_bq_execute_query_* ]] && [[ "$airflow_version" == "3" ]]; then
+                log_info "⏭️  Configured task '$conf_task' not in DAG (skipped - ExecuteQuery may not be available in Airflow 3)"
+            else
+                log_warn "⚠️  Configured task '$conf_task' NOT found in DAG tasks list"
+                failed=$((failed + 1))
+            fi
+        fi
+    done
+    unset IFS
+    log_info "✅ Orphan check complete"
 
-    # Task 7: Python custom BQ task should have reservation applied
-    if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "python_custom_bq_task" "✅ SUCCESS: Reservation was applied in custom Python code!" "true"; then
-        log_info "✅ Task 7: Python custom BigQuery task has reservation"
-        passed=$((passed + 1))
-    else
-        log_error "❌ Task 7: Python custom BigQuery task reservation NOT found"
-        failed=$((failed + 1))
-    fi
+    local IFS=$'\n'
+    for task_id in $tasks; do
+        # Skip assertion tasks in shell verification to avoid false positives
+        # (they log their subject's configuration which contains reservation strings)
+        if [[ "$task_id" == assert_* ]]; then
+            continue
+        fi
+
+        # Skip BigQueryExecuteQueryOperator tasks - they don't log api_resource_configs
+        # These are verified by assertion tasks in the DAG that query BigQuery API
+        if [[ "$task_id" == test_bq_execute_query_* ]]; then
+            log_info "⏭️  Task $task_id: Skipping log verification (ExecuteQuery - verified by assertion task)"
+            passed=$((passed + 1))
+            continue
+        fi
+
+        # Skip verification if logs don't exist (task didn't run)
+        local log_path="/opt/airflow/logs/dag_id=${dag_id}/run_id=${run_id}/task_id=${task_id}/attempt=1.log"
+        if ! docker compose -f "$compose_file" exec -T "$log_container" test -f "$log_path" 2>/dev/null; then
+            log_info "⏭️  Task $task_id: No logs found (skipped or not run). Skipping verification."
+            continue
+        fi
+
+        # Lookup reservation from config_map
+        local expected_reservation=""
+        expected_reservation=$(echo "$config_map" | grep "^${task_id}|" | cut -d'|' -f2)
+
+        if [ -n "$expected_reservation" ]; then
+            # Task is configured
+            # Expect specific reservation (including 'none')
+            if verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "$task_id" "Injected reservation $expected_reservation into task $task_id" "true" || \
+               verify_task_log "$compose_file" "$log_container" "$dag_id" "$run_id" "$task_id" "'reservation': '$expected_reservation'" "true"; then
+                log_info "✅ Task $task_id: Correctly has reservation '$expected_reservation'"
+                passed=$((passed + 1))
+            else
+                log_error "❌ Task $task_id: Expected reservation '$expected_reservation' NOT found"
+                failed=$((failed + 1))
+            fi
+        else
+            # Task is NOT configured -> Expect NO injection
+            local match_line
+            match_line=$(docker compose -f "$compose_file" exec -T "$log_container" grep "Injected reservation .* into task ${task_id} " "$log_path" 2>/dev/null | head -n 1)
+            if [ -z "$match_line" ]; then
+                log_info "✅ Task $task_id: Correctly has no reservation"
+                passed=$((passed + 1))
+            else
+                log_error "❌ Task $task_id: Unexpected reservation injection found"
+                log_error "  Line found: $match_line"
+                failed=$((failed + 1))
+            fi
+        fi
+    done
+    unset IFS
 
     log_info "=========================================="
-    log_info "Test Results: ${passed}/7 passed, ${failed}/7 failed"
+    log_info "Test Results: ${passed} passed, ${failed} failed"
     log_info "=========================================="
 
     return $failed

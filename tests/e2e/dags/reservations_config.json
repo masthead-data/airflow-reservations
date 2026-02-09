@@ -4,18 +4,25 @@
             "tag": "reservation",
             "reservation": "projects/masthead-dev/locations/US/reservations/capacity-1",
             "tasks": [
-                "test_reservation_dag.bq_insert_job_task",
-                "test_reservation_dag.bq_execute_query_task",
-                "test_reservation_dag.my_group.nested_task",
-                "test_reservation_dag.bq_check_task",
-                "test_reservation_dag.python_custom_bq_task"
+                "test_reservation_dag.test_bq_insert_job_std_sql_applied",
+                "test_reservation_dag.test_bq_execute_query_std_sql_applied",
+                "test_reservation_dag.test_bq_execute_query_manual_res_applied",
+                "test_reservation_dag.tg_group.test_bq_insert_job_nested_applied",
+                "test_reservation_dag.test_python_custom_operator_applied"
             ]
         },
         {
             "tag": "ondemand",
             "reservation": "none",
             "tasks": [
-                "test_reservation_dag.bq_ondemand_task"
+                "test_reservation_dag.test_bq_insert_job_on_demand_skipped"
+            ]
+        },
+        {
+            "tag": "skip",
+            "reservation": null,
+            "tasks": [
+                "test_reservation_dag.test_bq_insert_job_no_reservation_null"
             ]
         }
     ]

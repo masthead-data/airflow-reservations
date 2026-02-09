@@ -19,11 +19,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+## [0.1.1] - 2026-02-09
+
+### Added
+
+- ...
+
 ## [0.1.0] - 2026-01-22
 
 ### Added
 
 - Initial release of `airflow-reservations` package.
 
-[Unreleased]: https://github.com/masthead-data/airflow-reservations/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/masthead-data/airflow-reservations/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/masthead-data/airflow-reservations/releases/tag/v0.1.1
 [0.1.0]: https://github.com/masthead-data/airflow-reservations/releases/tag/v0.1.0

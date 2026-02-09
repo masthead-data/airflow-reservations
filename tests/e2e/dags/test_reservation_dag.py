@@ -1,7 +1,6 @@
 """E2E Test DAG for airflow-reservations using real BigQuery operators.
 
-This DAG tests the reservation policy with actual BigQuery operators using dryRun mode.
-The operators will log the SQL being executed, which we can verify contains the reservation.
+This DAG tests the reservation policy with actual BigQuery operators.
 """
 
 from datetime import datetime
@@ -14,9 +13,33 @@ except ImportError:
     from airflow.operators.python import PythonOperator
 
 from airflow.providers.google.cloud.operators.bigquery import (
-    BigQueryCheckOperator,
     BigQueryInsertJobOperator,
 )
+
+# BigQueryExecuteQueryOperator is only available in provider versions 2.0.0 - 10.26.0
+BigQueryExecuteQueryOperator = None
+try:
+    from importlib.metadata import version, PackageNotFoundError
+
+    provider_version = version("apache-airflow-providers-google")
+    version_parts = tuple(int(x) for x in provider_version.split(".")[:3])
+
+    if (2, 0, 0) <= version_parts <= (10, 26, 0):
+        from airflow.providers.google.cloud.operators.bigquery import (
+            BigQueryExecuteQueryOperator,
+        )
+
+        print(
+            f"BigQueryExecuteQueryOperator available (provider version {provider_version})"
+        )
+    else:
+        print(
+            f"BigQueryExecuteQueryOperator not supported in provider version {provider_version}"
+        )
+except (ImportError, PackageNotFoundError, ValueError) as e:
+    raise RuntimeError(
+        f"Could not determine provider version or import BigQueryExecuteQueryOperator: {e}"
+    ) from e
 
 try:
     from airflow.sdk import TaskGroup
@@ -25,12 +48,7 @@ except ImportError:
 
 
 def custom_python_bq_task(**context):
-    """Custom Python task that executes a BigQuery job.
-
-    This tests that custom Python code can use the policy's helper function
-    to apply reservations to BigQuery jobs and that the resulting SQL
-    is valid when executed via the BigQuery client.
-    """
+    """Custom Python task that executes a BigQuery job."""
     from airflow_reservations.config import get_reservation
 
     task_id = context["task_instance"].task_id
@@ -44,54 +62,118 @@ def custom_python_bq_task(**context):
     print("=" * 60)
 
     if not reservation:
-        print("❌ WARNING: No reservation configured for this task")
-        return {"reservation_applied": False}
+        print(
+            "⚠️ WARNING: No reservation configured for this task, continuing without it."
+        )
 
-    print(f"✅ SUCCESS: Reservation was applied in custom Python code!")
-    print(f"Reservation: {reservation}")
-
-    # Prepare SQL
     sql = """SELECT
     CURRENT_TIMESTAMP() AS timestamp,
     'test_reservation_dag' AS dag_name,
     NULL AS group_name,
-    'python_custom_bq_task' AS task_name,
+    'test_python_custom_operator_applied' AS task_name,
     'PythonOperator' AS operator_type"""
-
-    print(f"SQL to execute:\n{sql}")
 
     try:
         from google.cloud import bigquery
 
         client = bigquery.Client()
-        job_config = bigquery.QueryJobConfig(dry_run=True, use_query_cache=False)
+        job_config = bigquery.QueryJobConfig(use_query_cache=False)
 
         if reservation:
-            # The reservation property was added in google-cloud-bigquery 3.1.0
             if hasattr(job_config, "reservation"):
                 job_config.reservation = reservation
-                print(f"✅ Applied reservation via job_config.reservation: {reservation}")
+                print(
+                    f"✅ Applied reservation via job_config.reservation: {reservation}"
+                )
             else:
-                # Fallback for older SDK versions
                 sql = f"SET @@reservation='{reservation}';\n{sql}"
-                print(f"⚠️ job_config.reservation not supported, fell back to SQL: {reservation}")
+                print(
+                    f"⚠️ job_config.reservation not supported, fell back to SQL: {reservation}"
+                )
+
+            # Log in a format that common.sh can detect
+            print(f"INFO - Applied reservation: {{'reservation': '{reservation}'}}")
 
         query_job = client.query(sql, job_config=job_config)
+        query_job.result()
 
-        # A successful dry run means the query is valid and reservation is accepted
-        print(f"✅ SUCCESS: Dry run successful! Total bytes processed: {query_job.total_bytes_processed}")
-        return {
-            "reservation_applied": True,
-            "reservation": reservation,
-        }
+        # Return the job_id so that the assertion task can fetch it
+        return query_job.job_id
     except Exception as e:
-        print(f"⚠️ WARNING: Could not perform BigQuery dry run: {e}")
-        print("This might be expected if GCP credentials are not fully configured in the environment.")
+        print(f"⚠️ WARNING: Could not perform BigQuery job: {e}")
         return {
-            "reservation_applied": True,
-            "reservation": reservation,
             "error": str(e),
         }
+
+
+def assert_bigquery_job(subject_task_id: str, **context):
+    """Assertion task that validates the upstream BigQuery job."""
+    from google.cloud import bigquery
+
+    from airflow_reservations.config import get_reservation
+
+    ti = context["ti"]
+    dag_id = context["dag"].dag_id
+
+    expected_reservation = get_reservation(dag_id, subject_task_id)
+    print(
+        f"Checking task {subject_task_id} against expected reservation: {expected_reservation}"
+    )
+
+    # Resolve job_id from XCom.
+    job_id = ti.xcom_pull(task_ids=subject_task_id, key="job_id")
+    if not job_id:
+        job_id = ti.xcom_pull(task_ids=subject_task_id)
+    if not job_id:
+        raise RuntimeError(
+            f"Could not find job_id in XCom for {dag_id}.{subject_task_id}"
+        )
+
+    client = bigquery.Client()
+    job = client.get_job(job_id)
+
+    if job.state != "DONE":
+        raise RuntimeError(
+            f"BigQuery job {job_id} for {dag_id}.{subject_task_id} not DONE (state={job.state})"
+        )
+
+    if getattr(job, "error_result", None):
+        raise RuntimeError(
+            f"BigQuery job {job_id} for {dag_id}.{subject_task_id} failed: {job.error_result}"
+        )
+
+    if not expected_reservation or expected_reservation == "none":
+        return
+
+    actual_reservation = None
+    reservation_usage = getattr(job, "reservation_usage", None)
+    if reservation_usage:
+        try:
+            actual_reservation = reservation_usage[0].name
+        except Exception:
+            actual_reservation = None
+
+    if not actual_reservation:
+        stats = getattr(job, "_properties", {}).get("statistics", {})
+        actual_reservation = stats.get("reservation_id")
+
+    if actual_reservation:
+        is_match = expected_reservation in actual_reservation
+        if not is_match:
+            exp_name = expected_reservation.split("/")[-1]
+            act_name = (
+                str(actual_reservation)
+                .replace(".", "/")
+                .replace(":", "/")
+                .split("/")[-1]
+            )
+            is_match = exp_name == act_name
+
+        if not is_match:
+            raise AssertionError(
+                f"Expected BigQuery job {job_id} for {dag_id}.{subject_task_id} to use reservation containing '{expected_reservation}', but got {actual_reservation}"
+            )
+        print(f"✅ Job {job_id} correctly used reservation: {actual_reservation}")
 
 
 default_args = {
@@ -107,126 +189,128 @@ with DAG(
     default_args=default_args,
     description="E2E test DAG for airflow-reservations with real operators",
     schedule=None,
-    start_date=datetime(2024, 1, 1),
+    start_date=datetime(2026, 1, 1),
     catchup=False,
     tags=["test", "reservations", "e2e"],
 ) as dag:
 
-    # Task 1: BigQueryInsertJobOperator with reservation
-    # The policy will inject reservation into configuration.query.query
-    # Using simple SQL that doesn't require tables to exist
-    bq_insert_job = BigQueryInsertJobOperator(
-        task_id="bq_insert_job_task",
+    # BigQueryInsertJobOperator
+    test_bq_insert_job_std_sql_applied = BigQueryInsertJobOperator(
+        task_id="test_bq_insert_job_std_sql_applied",
         configuration={
             "query": {
-                "query": """SELECT
-                    CURRENT_TIMESTAMP() AS timestamp,
-                    'test_reservation_dag' AS dag_name,
-                    NULL AS group_name,
-                    'bq_insert_job_task' AS task_name,
-                    'BigQueryInsertJobOperator' AS operator_type""",
-                "useLegacySql": False,
+                "query": "SELECT 1 as val",
+                "useQueryCache": False,
             },
         },
         project_id="masthead-dev",
         location="US",
     )
 
-    # Task 2: BigQueryInsertJobOperator with reservation (using INSERT query)
-    # The policy will inject reservation into configuration.query.query
-    bq_execute_query = BigQueryInsertJobOperator(
-        task_id="bq_execute_query_task",
-        configuration={
-            "query": {
-                "query": """SELECT
-            CURRENT_TIMESTAMP() AS timestamp,
-            'test_reservation_dag' AS dag_name,
-            NULL AS group_name,
-            'bq_execute_query_task' AS task_name,
-            'BigQueryInsertJobOperator' AS operator_type""",
-                "useLegacySql": False,
-            },
-        },
-        project_id="masthead-dev",
-        location="US",
-    )
+    # BigQueryExecuteQueryOperator
+    if BigQueryExecuteQueryOperator:
+        test_bq_execute_query_std_sql_applied = BigQueryExecuteQueryOperator(
+            task_id="test_bq_execute_query_std_sql_applied",
+            sql="SELECT 'execute-query' as val",
+            api_resource_configs={"query": {"useQueryCache": False}},
+            location="US",
+        )
 
-    # Task 3: On-demand task (reservation = "none")
-    bq_ondemand = BigQueryInsertJobOperator(
-        task_id="bq_ondemand_task",
-        configuration={
-            "query": {
-                "query": """SELECT
-                    CURRENT_TIMESTAMP() AS timestamp,
-                    'test_reservation_dag' AS dag_name,
-                    NULL AS group_name,
-                    'bq_ondemand_task' AS task_name,
-                    'BigQueryInsertJobOperator' AS operator_type""",
-                "useLegacySql": False,
+        test_bq_execute_query_manual_res_applied = BigQueryExecuteQueryOperator(
+            task_id="test_bq_execute_query_manual_res_applied",
+            sql="SELECT 'manual-res' as val",
+            api_resource_configs={
+                "reservation": "projects/p/locations/US/reservations/r",
+                "query": {"useQueryCache": False},
             },
-        },
-        project_id="masthead-dev",
-        location="US",
-    )
+            location="US",
+        )
+    else:
+        test_bq_execute_query_std_sql_applied = None
+        test_bq_execute_query_manual_res_applied = None
 
-    # Task 4: Task NOT in config (should NOT get any reservation)
-    bq_no_reservation = BigQueryInsertJobOperator(
-        task_id="bq_no_reservation_task",
-        configuration={
-            "query": {
-                "query": """SELECT
-                    CURRENT_TIMESTAMP() AS timestamp,
-                    'test_reservation_dag' AS dag_name,
-                    NULL AS group_name,
-                    'bq_no_reservation_task' AS task_name,
-                    'BigQueryInsertJobOperator' AS operator_type""",
-                "useLegacySql": False,
-            },
-        },
-        project_id="masthead-dev",
-        location="US",
-    )
-
-    # Task 5: Task inside a TaskGroup
-    with TaskGroup("my_group") as tg:
-        bq_nested_task = BigQueryInsertJobOperator(
-            task_id="nested_task",
+    # BigQueryInsertJobOperator - Nested in TaskGroup
+    with TaskGroup("tg_group") as tg:
+        test_bq_insert_job_nested_applied = BigQueryInsertJobOperator(
+            task_id="test_bq_insert_job_nested_applied",
             configuration={
                 "query": {
-                    "query": """SELECT
-                        CURRENT_TIMESTAMP() AS timestamp,
-                        'test_reservation_dag' AS dag_name,
-                        'my_group' AS group_name,
-                        'nested_task' AS task_name,
-                        'BigQueryInsertJobOperator' AS operator_type""",
-                    "useLegacySql": False,
+                    "query": "SELECT 'nested' as val",
+                    "useQueryCache": False,
                 },
             },
             project_id="masthead-dev",
             location="US",
         )
 
-    # Task 6: BigQueryCheckOperator to test Check operators support
-    # CheckOperator expects a query that returns a value to validate (e.g., a count or boolean)
-    bq_check = BigQueryCheckOperator(
-        task_id="bq_check_task",
-        sql="""SELECT COUNT(*) > 0 FROM (
-            SELECT
-                CURRENT_TIMESTAMP() AS timestamp,
-                'test_reservation_dag' AS dag_name,
-                NULL AS group_name,
-                'bq_check_task' AS task_name,
-                'BigQueryCheckOperator' AS operator_type
-        )""",
-        use_legacy_sql=False,
-        location="US",
-    )
-
-    # Task 7: Custom Python task demonstrating programmatic reservation usage
-    python_custom_bq = PythonOperator(
-        task_id="python_custom_bq_task",
+    # PythonOperator - Custom BigQuery Client
+    test_python_custom_operator_applied = PythonOperator(
+        task_id="test_python_custom_operator_applied",
         python_callable=custom_python_bq_task,
     )
 
-    # Set dependencies - run all tasks in parallel for faster e2e testing
-    [bq_insert_job, bq_execute_query, bq_ondemand, bq_no_reservation, tg, bq_check, python_custom_bq]
+    # BigQueryInsertJobOperator - Explicit On-demand
+    test_bq_insert_job_on_demand_skipped = BigQueryInsertJobOperator(
+        task_id="test_bq_insert_job_on_demand_skipped",
+        configuration={
+            "query": {
+                "query": "SELECT 'on-demand' as val",
+                "useQueryCache": False,
+            },
+        },
+        project_id="masthead-dev",
+        location="US",
+    )
+
+    # BigQueryInsertJobOperator - No Reservation (Explicitly mapped to null)
+    test_bq_insert_job_no_reservation_null = BigQueryInsertJobOperator(
+        task_id="test_bq_insert_job_no_reservation_null",
+        configuration={
+            "query": {
+                "query": "SELECT 'no-res' as val",
+                "useQueryCache": False,
+            },
+        },
+        project_id="masthead-dev",
+        location="US",
+    )
+
+    # Assertion tasks
+    def create_assert(subject_id):
+        return PythonOperator(
+            task_id=f"assert_{subject_id.replace('.', '_')}",
+            python_callable=assert_bigquery_job,
+            op_kwargs={"subject_task_id": subject_id},
+        )
+
+    (
+        create_assert("test_bq_insert_job_std_sql_applied")
+        << test_bq_insert_job_std_sql_applied
+    )
+    (
+        create_assert("test_bq_insert_job_on_demand_skipped")
+        << test_bq_insert_job_on_demand_skipped
+    )
+    (
+        create_assert("test_bq_insert_job_no_reservation_null")
+        << test_bq_insert_job_no_reservation_null
+    )
+    (
+        create_assert("tg_group.test_bq_insert_job_nested_applied")
+        << test_bq_insert_job_nested_applied
+    )
+
+    (
+        create_assert("test_python_custom_operator_applied")
+        << test_python_custom_operator_applied
+    )
+
+    if test_bq_execute_query_std_sql_applied:
+        (
+            create_assert("test_bq_execute_query_std_sql_applied")
+            << test_bq_execute_query_std_sql_applied
+        )
+        (
+            create_assert("test_bq_execute_query_manual_res_applied")
+            << test_bq_execute_query_manual_res_applied
+        )

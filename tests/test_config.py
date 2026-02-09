@@ -209,27 +209,6 @@ class TestGetReservationEntry:
         assert result["reservation"] is None
 
 
-class TestFormatReservationSql:
-    """Tests for format_reservation_sql function."""
-
-    def test_format_reservation_sql(self):
-        """Test formatting a reservation SQL statement."""
-        result = config.format_reservation_sql(
-            "projects/my-project/locations/US/reservations/my-res"
-        )
-
-        assert (
-            result
-            == "SET @@reservation='projects/my-project/locations/US/reservations/my-res';\n"
-        )
-
-    def test_format_none_reservation_sql(self):
-        """Test formatting 'none' for on-demand capacity."""
-        result = config.format_reservation_sql("none")
-
-        assert result == "SET @@reservation='none';\n"
-
-
 class TestBuildReservationLookup:
     """Tests for _build_reservation_lookup function."""
 

@@ -7,9 +7,9 @@ This package integrates with Airflow's [Cluster Policies](https://airflow.apache
 ## Features
 
 - **Automatic re-assignment** - intercepts BigQuery operators and re-assigns them to appropriate reservation based on the configuration:
-  - `BigQueryInsertJobOperator` - Injects into `configuration.query.query` dict
-  - Any BigQuery operator with a `sql` attribute (e.g. `BigQueryExecuteQueryOperator`, `BigQueryCheckOperator`)
-- **Lookup-based Configuration** - Uses `dag_id.task_id` → `reservation_id` mappings
+  - `BigQueryInsertJobOperator` - Injects into `configuration.reservation` field
+  - `BigQueryExecuteQueryOperator` - Injects into `api_resource_configs.reservation` field (supported in provider package 2.0.0 - 10.26.0)
+- **Lookup-based Configuration** - Uses `dag_id.task_id` → `reservation` mappings
 - **Python API** - Provides `get_reservation()` for custom BigQuery API calls in `PythonOperator`
 - **Performance Optimized** - Config caching with file mtime-based invalidation
 - **Graceful Error Handling** - Won't crash Airflow on config errors
@@ -23,7 +23,7 @@ pip install airflow-reservations
 Or add to your `requirements.txt`:
 
 ```text
-airflow-reservations=0.1.0
+airflow-reservations=0.1.1
 ```
 
 The policy is automatically registered via Airflow's plugin entrypoint system (requires Airflow 2.6+).
@@ -74,8 +74,8 @@ Create a `reservations_config.json` file in your DAGs folder:
 | Value                                           | Behavior                                                                |
 | ----------------------------------------------- | ----------------------------------------------------------------------- |
 | `"projects/.../locations/.../reservations/..."` | Injects that reservation into the SQL                                   |
-| `"none"`                                        | Injects `SET @@reservation='none';` (explicitly use on-demand capacity) |
-| `null`                                          | Skips the task entirely (no SQL modification)                           |
+| `"none"`                                        | Explicitly use on-demand capacity                                       |
+| `null`                                          | Skips the task                                                          |
 
 ### Configuration Path
 
@@ -111,15 +111,7 @@ When Airflow parses your DAGs, this plugin's `task_policy` hook is called for ea
 
 1. Extracts `dag_id` and `task_id` from the task
 2. Looks up `dag_id.task_id` in the configuration file
-3. If found, prepends `SET @@reservation='...';` to the SQL query
-
-```mermaid
-flowchart LR
-    A[DAG Parsing] -->|Triggers| B[task_policy hook]
-    B -->|Looks up| C[reservations_config.json]
-    C -->|Returns reservation| B
-    B -->|Re-assigns a query to a reservation| D[BigQuery Operator]
-```
+3. If found, assigns the task to a reservation
 
 ## Usage in Python Operators
 
@@ -245,5 +237,3 @@ In Airflow 3, the Task SDK parses DAGs in a separate process/container from the 
 1. **Installation**: The `airflow-reservations` package must be installed in the environment where the Task SDK executes (typically your custom Airflow image).
 2. **Config Accessibility**: The `reservations_config.json` file must be accessible to the Task SDK process. If you are using remote DAG storage, ensure the config file is bundled with your DAGs or placed in a shared volume.
 3. **Environment Variables**: If you use `RESERVATIONS_CONFIG_PATH`, it must be set in the environment of the worker/execution container as well.
-
-The plugin uses Airflow's standard [Cluster Policies](https://airflow.apache.org/docs/apache-airflow/stable/administration-and-deployment/cluster-policies.html) API, which remains the recommended way to implement cross-cutting concerns in Airflow 3.
