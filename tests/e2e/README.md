@@ -27,8 +27,8 @@ tests/e2e/
 ├── docker-compose.yml         # Airflow 2.x multi-container setup
 ├── docker-compose.airflow-3-standalone.yml  # Airflow 3.x standalone setup
 ├── dags/                      # Test DAGs and configuration
-│   ├── test_reservation_dag.py
-│   └── reservations_config.json
+│   ├── test_reservation_dag.py         # Test DAG with multiple operator types and assertion tasks
+│   └── reservations_config.json        # Reservation mappings for test tasks
 ```
 
 ## Test Runner
@@ -71,29 +71,33 @@ The unified test runner (`run_e2e_test.sh`) supports multiple Airflow versions t
 - **Architecture**: Task SDK with API server communication
 - **Compose file**: `docker-compose.airflow-3-standalone.yml`
 - **CLI syntax**: Uses positional arguments (e.g., `airflow dags list-runs test_dag`)
+- **BigQueryExecuteQueryOperator**: Not available (removed in provider v11.0.0+)
 - **Why standalone?**: Multi-container deployment has Task SDK API communication issues
 
 ## Test Scenarios
 
-Each test run now verifies reservation behavior for all supported BigQuery operator types:
+The test DAG verifies reservation behavior across all supported BigQuery operator types:
 
-- **BigQueryInsertJobOperator**
-  - Standard SQL and Legacy SQL support
-  - Reservation injected via `configuration.reservation` field
-  - Supports nested task groups
-  - Supports on-demand reservation (`'none'`) and no reservation (task not in config)
-- **BigQueryExecuteQueryOperator**
-  - Reservation injected via `api_resource_configs.reservation` field
-  - Two test tasks verify proper reservation injection
+- BigQueryInsertJobOperator
+    - **Standard SQL with reservation**: Verifies reservation injection via `configuration.reservation`
+    - **Nested in TaskGroup**: Confirms reservation injection works for tasks in task groups
+    - **On-demand (`'none'`)**: Validates explicit on-demand (no reservation) configuration
+    - **No reservation (`null`)**: Confirms no injection when task is not configured
 
-For operators where a BigQuery `job_id` can be retrieved, the DAG includes downstream assertion
-tasks that verify the corresponding BigQuery job completed successfully (and, where possible,
-used the expected reservation). The shell harness (`verify_all_tasks`) continues to provide
-log-based verification and debugging support.
+- BigQueryExecuteQueryOperator (Provider 2.0.0-10.26.0 only)
+    - **Standard SQL with reservation**: Verifies injection via `api_resource_configs.reservation`
+    - **Pre-configured reservation**: Ensures manually set reservations are preserved (not overwritten)
+    - **Conditional loading**: Automatically skipped in Airflow 3.x or unsupported provider versions
+
+- PythonOperator with Custom BigQuery Client
+
+Testing combines two-layer verification methods:
+1. **Log-based verification** (`verify_all_tasks` in shell): Checks Airflow logs for injection messages
+2. **BigQuery API verification** (assertion tasks in DAG): Queries BigQuery API to confirm actual reservation usage
 
 ## Common Library
 
-The `lib/common.sh` library provides reusable functions:
+The `lib/common.sh` library provides reusable functions with built-in version compatibility:
 
 - `wait_for_airflow_health()`: Wait for Airflow to be healthy
 - `wait_for_dag()`: Wait for DAG to be parsed
@@ -102,8 +106,9 @@ The `lib/common.sh` library provides reusable functions:
 - `get_latest_run_id()`: Get the most recent run ID
 - `verify_task_log()`: Verify task log contains expected content
 - `verify_all_tasks()`: Run all standard test verifications
-
-These functions handle version-specific differences (e.g., CLI syntax) internally.
+  - Handles conditional operator availability (e.g., BigQueryExecuteQueryOperator)
+  - Skips log verification for BigQueryExecuteQueryOperator that doesn't log details
+  - Checks for orphaned configuration entries
 
 ## Makefile Targets
 
@@ -151,9 +156,11 @@ docker compose -f docker-compose.airflow-3-standalone.yml down -v
 
 ### Adding New Test Scenarios
 
-1. Update `dags/test_reservation_dag.py` with new tasks
-2. Update `reservations_config.json` if needed
-3. Add verification logic to `lib/common.sh` in `verify_all_tasks()`
+1. Add new task to `dags/test_reservation_dag.py`
+2. Add corresponding assertion task (if task returns job_id)
+3. Update `dags/reservations_config.json` with task reservation mapping
+4. Verify log-based checks work in `lib/common.sh` `verify_all_tasks()` function
+5. Run tests: `make e2e`
 
 ### Testing New Airflow Versions
 

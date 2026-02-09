@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "airflow-reservations"
-version = "0.1.0"
+version = "0.1.1"
 description = "Airflow Cluster Policy for BigQuery reservation management"
 readme = "README.md"
 license = {file = "LICENSE"}

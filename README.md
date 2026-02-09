@@ -23,7 +23,7 @@ pip install airflow-reservations
 Or add to your `requirements.txt`:
 
 ```text
-airflow-reservations=0.1.0
+airflow-reservations=0.1.1
 ```
 
 The policy is automatically registered via Airflow's plugin entrypoint system (requires Airflow 2.6+).

@@ -28,11 +28,18 @@ try:
         from airflow.providers.google.cloud.operators.bigquery import (
             BigQueryExecuteQueryOperator,
         )
-        print(f"BigQueryExecuteQueryOperator available (provider version {provider_version})")
+
+        print(
+            f"BigQueryExecuteQueryOperator available (provider version {provider_version})"
+        )
     else:
-        print(f"BigQueryExecuteQueryOperator not supported in provider version {provider_version}")
+        print(
+            f"BigQueryExecuteQueryOperator not supported in provider version {provider_version}"
+        )
 except (ImportError, PackageNotFoundError, ValueError) as e:
-    raise RuntimeError(f"Could not determine provider version or import BigQueryExecuteQueryOperator: {e}") from e
+    raise RuntimeError(
+        f"Could not determine provider version or import BigQueryExecuteQueryOperator: {e}"
+    ) from e
 
 try:
     from airflow.sdk import TaskGroup
@@ -276,13 +283,34 @@ with DAG(
             op_kwargs={"subject_task_id": subject_id},
         )
 
-    create_assert("test_bq_insert_job_std_sql_applied") << test_bq_insert_job_std_sql_applied
-    create_assert("test_bq_insert_job_on_demand_skipped") << test_bq_insert_job_on_demand_skipped
-    create_assert("test_bq_insert_job_no_reservation_null") << test_bq_insert_job_no_reservation_null
-    create_assert("tg_group.test_bq_insert_job_nested_applied") << test_bq_insert_job_nested_applied
+    (
+        create_assert("test_bq_insert_job_std_sql_applied")
+        << test_bq_insert_job_std_sql_applied
+    )
+    (
+        create_assert("test_bq_insert_job_on_demand_skipped")
+        << test_bq_insert_job_on_demand_skipped
+    )
+    (
+        create_assert("test_bq_insert_job_no_reservation_null")
+        << test_bq_insert_job_no_reservation_null
+    )
+    (
+        create_assert("tg_group.test_bq_insert_job_nested_applied")
+        << test_bq_insert_job_nested_applied
+    )
 
-    create_assert("test_python_custom_operator_applied") << test_python_custom_operator_applied
+    (
+        create_assert("test_python_custom_operator_applied")
+        << test_python_custom_operator_applied
+    )
 
     if test_bq_execute_query_std_sql_applied:
-        create_assert("test_bq_execute_query_std_sql_applied") << test_bq_execute_query_std_sql_applied
-        create_assert("test_bq_execute_query_manual_res_applied") << test_bq_execute_query_manual_res_applied
+        (
+            create_assert("test_bq_execute_query_std_sql_applied")
+            << test_bq_execute_query_std_sql_applied
+        )
+        (
+            create_assert("test_bq_execute_query_manual_res_applied")
+            << test_bq_execute_query_manual_res_applied
+        )
