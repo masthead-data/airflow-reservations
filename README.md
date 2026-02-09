@@ -1,5 +1,7 @@
 # Airflow Reservations Policy
 
+[![PyPI](https://img.shields.io/pypi/v/airflow-reservations.svg)](https://pypi.org/project/airflow-reservations/)
+
 Airflow Cluster Policy plugin for BigQuery reservation management.
 
 This package integrates with Airflow's [Cluster Policies](https://airflow.apache.org/docs/apache-airflow/stable/administration-and-deployment/cluster-policies.html) to automatically inject BigQuery reservation assignments into your tasks without requiring any changes to your DAG code.
