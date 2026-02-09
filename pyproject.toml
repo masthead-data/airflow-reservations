@@ -45,11 +45,19 @@ Repository = "https://github.com/masthead-data/airflow-reservations"
 [tool.hatch.version]
 path = "src/airflow_reservations/__init__.py"
 
+[tool.hatch.build.targets.sdist]
+exclude = [
+  "/.github",
+  "/tests",
+  "Makefile",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/airflow_reservations"]
+
 [project.entry-points.'airflow.policy']
 airflow_reservations = "airflow_reservations.policy"
 
-[tool.setuptools.packages.find]
-where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

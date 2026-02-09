@@ -4,3 +4,5 @@ __pycache__/
 src/airflow_reservations.egg-info/
 .coverage
 dist/
+.DS_Store
+.venv/
