@@ -32,58 +32,52 @@ BIGQUERY_OPERATOR_TYPES = frozenset(
 
 def _init_debug_info():
     """One-time informational check for environment compatibility."""
+
+    from importlib.metadata import PackageNotFoundError, version
+
+    # Check for operators
+    ops_found = []
     try:
-        from importlib.metadata import PackageNotFoundError, version
-
-        import airflow
-        from google.cloud import bigquery
-
-        # Check for operators
-        ops_found = []
-        try:
-            from airflow.providers.google.cloud.operators.bigquery import (
-                BigQueryInsertJobOperator,
-            )
-
-            ops_found.append("BigQueryInsertJobOperator")
-        except ImportError:
-            pass
-
-        try:
-            from airflow.providers.google.cloud.operators.bigquery import (
-                BigQueryExecuteQueryOperator,
-            )
-
-            ops_found.append("BigQueryExecuteQueryOperator")
-        except ImportError:
-            pass
-
-        # Check versions
-        try:
-            bq_version = version("google-cloud-bigquery")
-        except PackageNotFoundError:
-            bq_version = "unknown"
-
-        try:
-            provider_version = version("apache-airflow-providers-google")
-        except PackageNotFoundError:
-            provider_version = "unknown"
-
-        # Check for reservation field support in bigquery library
-        # The property was added in google-cloud-bigquery 3.1.0
-        has_reservation_field = hasattr(bigquery.QueryJobConfig, "reservation")
-
-        logger.info(
-            "Airflow Reservations Initialized: [Airflow %s] [Google Provider %s] [BigQuery Client %s] [Reservation Support: %s] [Detected Operators: %s]",
-            airflow.__version__,
-            provider_version,
-            bq_version,
-            has_reservation_field,
-            ", ".join(ops_found) if ops_found else "None",
+        from airflow.providers.google.cloud.operators.bigquery import (
+            BigQueryInsertJobOperator,
         )
-    except Exception:
-        # Silently fail if dependencies are missing during initialization
+
+        ops_found.append("BigQueryInsertJobOperator")
+    except ImportError:
         pass
+
+    try:
+        from airflow.providers.google.cloud.operators.bigquery import (
+            BigQueryExecuteQueryOperator,
+        )
+
+        ops_found.append("BigQueryExecuteQueryOperator")
+    except ImportError:
+        pass
+
+    # Check version and reservation field support in bigquery library
+    try:
+        bq_version = version("google-cloud-bigquery")
+    except PackageNotFoundError:
+        bq_version = "unknown"
+
+    try:
+        provider_version = version("apache-airflow-providers-google")
+    except PackageNotFoundError:
+        provider_version = "unknown"
+
+    try:
+        airflow_version = version("apache-airflow")
+    except PackageNotFoundError:
+        airflow_version = "unknown"
+
+    logger.debug(
+        "Airflow Reservations Initialized: [Airflow %s] [Google Provider %s] [BigQuery Client %s] [Detected Operators: %s]",
+        airflow_version,
+        provider_version,
+        bq_version,
+        ", ".join(ops_found) if ops_found else "None",
+    )
 
 
 # Executed when module is loaded

@@ -315,8 +315,8 @@ verify_all_tasks() {
     local IFS=$'\n'
     for conf_task in $configured_tasks; do
         if ! echo "$tasks" | grep -q "^${conf_task}$"; then
-            if [[ "$conf_task" == test_bq_execute_query_* ]]; then
-                log_info "⏭️  Configured task '$conf_task' not in DAG (skipped - ExecuteQuery may not be available)"
+            if [[ "$conf_task" == test_bq_execute_query_* ]] && [[ "$airflow_version" == "3" ]]; then
+                log_info "⏭️  Configured task '$conf_task' not in DAG (skipped - ExecuteQuery may not be available in Airflow 3)"
             else
                 log_warn "⚠️  Configured task '$conf_task' NOT found in DAG tasks list"
                 failed=$((failed + 1))

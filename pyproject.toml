@@ -27,6 +27,7 @@ classifiers = [
 keywords = ["airflow", "bigquery", "reservations", "capacity", "masthead"]
 dependencies = [
     "apache-airflow>=2.6",
+    "apache-airflow-providers-google>=10.26.0",
 ]
 
 [project.optional-dependencies]

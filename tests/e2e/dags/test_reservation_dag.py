@@ -16,23 +16,28 @@ from airflow.providers.google.cloud.operators.bigquery import (
     BigQueryInsertJobOperator,
 )
 
+# BigQueryExecuteQueryOperator is only available in provider versions 2.0.0 - 10.26.0
+BigQueryExecuteQueryOperator = None
 try:
-    from airflow.providers.google.cloud.operators.bigquery import (
-        BigQueryExecuteQueryOperator,
-    )
-except ImportError:
-    BigQueryExecuteQueryOperator = None
+    from importlib.metadata import version, PackageNotFoundError
+
+    provider_version = version("apache-airflow-providers-google")
+    version_parts = tuple(int(x) for x in provider_version.split(".")[:3])
+
+    if (2, 0, 0) <= version_parts <= (10, 26, 0):
+        from airflow.providers.google.cloud.operators.bigquery import (
+            BigQueryExecuteQueryOperator,
+        )
+        print(f"BigQueryExecuteQueryOperator available (provider version {provider_version})")
+    else:
+        print(f"BigQueryExecuteQueryOperator not supported in provider version {provider_version}")
+except (ImportError, PackageNotFoundError, ValueError) as e:
+    raise RuntimeError(f"Could not determine provider version or import BigQueryExecuteQueryOperator: {e}") from e
 
 try:
     from airflow.sdk import TaskGroup
 except ImportError:
     from airflow.utils.task_group import TaskGroup
-
-import airflow
-
-# Detect Airflow version to handle version-specific compatibility
-AIRFLOW_VERSION = tuple(int(x) for x in airflow.__version__.split(".")[:2])
-IS_AIRFLOW_3_PLUS = AIRFLOW_VERSION >= (3, 0)
 
 
 def custom_python_bq_task(**context):
@@ -53,9 +58,7 @@ def custom_python_bq_task(**context):
         print(
             "⚠️ WARNING: No reservation configured for this task, continuing without it."
         )
-        # Proceed anyway to run a regular job so job_id exists
 
-    # Prepare SQL
     sql = """SELECT
     CURRENT_TIMESTAMP() AS timestamp,
     'test_reservation_dag' AS dag_name,
@@ -85,7 +88,7 @@ def custom_python_bq_task(**context):
             print(f"INFO - Applied reservation: {{'reservation': '{reservation}'}}")
 
         query_job = client.query(sql, job_config=job_config)
-        query_job.result()  # Wait for completion
+        query_job.result()
 
         # Return the job_id so that the assertion task can fetch it
         return query_job.job_id
@@ -105,13 +108,12 @@ def assert_bigquery_job(subject_task_id: str, **context):
     ti = context["ti"]
     dag_id = context["dag"].dag_id
 
-    # Resolve expected reservation dynamically
     expected_reservation = get_reservation(dag_id, subject_task_id)
     print(
         f"Checking task {subject_task_id} against expected reservation: {expected_reservation}"
     )
 
-    # 1. Resolve job_id from XCom.
+    # Resolve job_id from XCom.
     job_id = ti.xcom_pull(task_ids=subject_task_id, key="job_id")
     if not job_id:
         job_id = ti.xcom_pull(task_ids=subject_task_id)
@@ -185,19 +187,20 @@ with DAG(
     tags=["test", "reservations", "e2e"],
 ) as dag:
 
-    # BigQueryInsertJobOperator - Standard SQL
+    # BigQueryInsertJobOperator
     test_bq_insert_job_std_sql_applied = BigQueryInsertJobOperator(
         task_id="test_bq_insert_job_std_sql_applied",
         configuration={
             "query": {
                 "query": "SELECT 1 as val",
+                "useQueryCache": False,
             },
         },
         project_id="masthead-dev",
         location="US",
     )
 
-    # BigQueryExecuteQueryOperator (If available)
+    # BigQueryExecuteQueryOperator
     if BigQueryExecuteQueryOperator:
         test_bq_execute_query_std_sql_applied = BigQueryExecuteQueryOperator(
             task_id="test_bq_execute_query_std_sql_applied",
@@ -226,6 +229,7 @@ with DAG(
             configuration={
                 "query": {
                     "query": "SELECT 'nested' as val",
+                    "useQueryCache": False,
                 },
             },
             project_id="masthead-dev",
@@ -244,6 +248,7 @@ with DAG(
         configuration={
             "query": {
                 "query": "SELECT 'on-demand' as val",
+                "useQueryCache": False,
             },
         },
         project_id="masthead-dev",
@@ -256,6 +261,7 @@ with DAG(
         configuration={
             "query": {
                 "query": "SELECT 'no-res' as val",
+                "useQueryCache": False,
             },
         },
         project_id="masthead-dev",
@@ -270,33 +276,13 @@ with DAG(
             op_kwargs={"subject_task_id": subject_id},
         )
 
-    (
-        create_assert("test_bq_insert_job_std_sql_applied")
-        << test_bq_insert_job_std_sql_applied
-    )
-    (
-        create_assert("test_bq_insert_job_on_demand_skipped")
-        << test_bq_insert_job_on_demand_skipped
-    )
-    (
-        create_assert("test_bq_insert_job_no_reservation_null")
-        << test_bq_insert_job_no_reservation_null
-    )
-    (
-        create_assert("tg_group.test_bq_insert_job_nested_applied")
-        << test_bq_insert_job_nested_applied
-    )
-    (
-        create_assert("test_python_custom_operator_applied")
-        << test_python_custom_operator_applied
-    )
+    create_assert("test_bq_insert_job_std_sql_applied") << test_bq_insert_job_std_sql_applied
+    create_assert("test_bq_insert_job_on_demand_skipped") << test_bq_insert_job_on_demand_skipped
+    create_assert("test_bq_insert_job_no_reservation_null") << test_bq_insert_job_no_reservation_null
+    create_assert("tg_group.test_bq_insert_job_nested_applied") << test_bq_insert_job_nested_applied
+
+    create_assert("test_python_custom_operator_applied") << test_python_custom_operator_applied
 
     if test_bq_execute_query_std_sql_applied:
-        (
-            create_assert("test_bq_execute_query_std_sql_applied")
-            << test_bq_execute_query_std_sql_applied
-        )
-        (
-            create_assert("test_bq_execute_query_manual_res_applied")
-            << test_bq_execute_query_manual_res_applied
-        )
+        create_assert("test_bq_execute_query_std_sql_applied") << test_bq_execute_query_std_sql_applied
+        create_assert("test_bq_execute_query_manual_res_applied") << test_bq_execute_query_manual_res_applied
