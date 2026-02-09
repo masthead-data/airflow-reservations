@@ -19,7 +19,7 @@ make e2e-all
 
 The e2e test infrastructure is designed to test the plugin with both Airflow 2.x and 3.x using a unified framework:
 
-```
+```text
 tests/e2e/
 ├── lib/
 │   └── common.sh              # Shared test utilities and functions
@@ -59,12 +59,14 @@ The unified test runner (`run_e2e_test.sh`) supports multiple Airflow versions t
 ## Airflow Version Differences
 
 ### Airflow 2.x (2.10.4-python3.11)
+
 - **Deployment**: Multi-container with separate webserver, scheduler, and triggerer
 - **Executor**: LocalExecutor
 - **Compose file**: `docker-compose.yml`
 - **CLI syntax**: Uses `-d` flag for DAG ID (e.g., `airflow dags list-runs -d test_dag`)
 
 ### Airflow 3.x (3.1.5-python3.12)
+
 - **Deployment**: Standalone mode (all components in one container)
 - **Architecture**: Task SDK with API server communication
 - **Compose file**: `docker-compose.airflow-3-standalone.yml`
@@ -76,15 +78,13 @@ The unified test runner (`run_e2e_test.sh`) supports multiple Airflow versions t
 Each test run now verifies reservation behavior for all supported BigQuery operator types:
 
 - **BigQueryInsertJobOperator**
-  - `bq_insert_job_task`: standard reservation injection
-  - `bq_execute_query_task`: query-style insert job with reservation
-  - `bq_ondemand_task`: on-demand reservation (`'none'`)
-  - `bq_no_reservation_task`: no reservation (task not in config)
-  - `my_group.nested_task`: nested task group reservation
-  - `bq_insert_job_legacy_task`: legacy SQL configuration with reservation
+  - Standard SQL and Legacy SQL support
+  - Reservation injected via `configuration.reservation` field
+  - Supports nested task groups
+  - Supports on-demand reservation (`'none'`) and no reservation (task not in config)
 - **BigQueryExecuteQueryOperator**
-  - `bq_execute_query_op_applied`: re-assigned to configured reservation
-  - `bq_execute_query_op_skipped`: pre-existing reservation, policy skip verified
+  - Reservation injected via `api_resource_configs.reservation` field
+  - Two test tasks verify proper reservation injection
 
 For operators where a BigQuery `job_id` can be retrieved, the DAG includes downstream assertion
 tasks that verify the corresponding BigQuery job completed successfully (and, where possible,
@@ -120,6 +120,7 @@ make e2e-keep      # Test with Airflow 2.x, keep containers running
 ### Access Airflow UI
 
 When using `--keep` flag:
+
 - **URL**: http://localhost:8080
 - **Credentials**: admin/admin
 

@@ -182,7 +182,7 @@ RUN_ID=$(get_latest_run_id "$COMPOSE_FILE" "$WEBSERVER_CONTAINER" "$DAG_ID" "$AI
 log_info "Checking logs for run: $RUN_ID"
 
 # Verify all tasks
-verify_all_tasks "$COMPOSE_FILE" "$LOG_CONTAINER" "$DAG_ID" "$RUN_ID"
+verify_all_tasks "$COMPOSE_FILE" "$LOG_CONTAINER" "$DAG_ID" "$RUN_ID" "../dags/reservations_config.json" "$AIRFLOW_VERSION"
 verification_result=$?
 
 if [ $verification_result -ne 0 ]; then

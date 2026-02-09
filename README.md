@@ -7,8 +7,8 @@ This package integrates with Airflow's [Cluster Policies](https://airflow.apache
 ## Features
 
 - **Automatic re-assignment** - intercepts BigQuery operators and re-assigns them to appropriate reservation based on the configuration:
-  - `BigQueryInsertJobOperator` - Injects into `configuration.reservation` dict
-  - `BigQueryExecuteQueryOperator` - Injects into `query` dict
+  - `BigQueryInsertJobOperator` - Injects into `configuration.reservation` field
+  - `BigQueryExecuteQueryOperator` - Injects into `api_resource_configs.reservation` field (supported in provider package 2.0.0 - 10.26.0)
 - **Lookup-based Configuration** - Uses `dag_id.task_id` → `reservation` mappings
 - **Python API** - Provides `get_reservation()` for custom BigQuery API calls in `PythonOperator`
 - **Performance Optimized** - Config caching with file mtime-based invalidation

@@ -67,7 +67,7 @@ services:
           cp -rf /opt/airflow/plugin_src/. /tmp/plugin/
         fi
         pip install --quiet --no-cache-dir /tmp/plugin
-        pip install --quiet --no-cache-dir apache-airflow-providers-google
+        pip install --quiet --no-cache-dir apache-airflow-providers-google==10.26.0
         echo "Initializing database..."
         airflow db migrate
         airflow users create \
@@ -93,7 +93,7 @@ services:
           cp -rf /opt/airflow/plugin_src/. /tmp/plugin/
         fi &&
         pip install --quiet --no-cache-dir /tmp/plugin &&
-        pip install --quiet --no-cache-dir apache-airflow-providers-google &&
+        pip install --quiet --no-cache-dir apache-airflow-providers-google==10.26.0 &&
         airflow scheduler
       "
     healthcheck:
@@ -118,7 +118,7 @@ services:
           cp -rf /opt/airflow/plugin_src/. /tmp/plugin/
         fi &&
         pip install --quiet --no-cache-dir /tmp/plugin &&
-        pip install --quiet --no-cache-dir apache-airflow-providers-google &&
+        pip install --quiet --no-cache-dir apache-airflow-providers-google==10.26.0 &&
         airflow triggerer
       "
     healthcheck:

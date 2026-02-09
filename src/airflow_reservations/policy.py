@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING
 from airflow.policies import hookimpl
 
 from airflow_reservations.config import (
-    format_reservation_sql,
     get_reservation,
 )
 
@@ -26,46 +25,65 @@ logger = logging.getLogger(__name__)
 BIGQUERY_OPERATOR_TYPES = frozenset(
     {
         "BigQueryInsertJobOperator",
-        "BigQueryExecuteQueryOperator",  # Deprecated in newer versions
+        "BigQueryExecuteQueryOperator",
     }
 )
 
 
 def _init_debug_info():
     """One-time informational check for environment compatibility."""
-    import airflow
-    from google.cloud import bigquery
-
-    # Check for operators
-    ops_found = []
     try:
-        from airflow.providers.google.cloud.operators.bigquery import (
-            BigQueryInsertJobOperator,
+        from importlib.metadata import PackageNotFoundError, version
+
+        import airflow
+        from google.cloud import bigquery
+
+        # Check for operators
+        ops_found = []
+        try:
+            from airflow.providers.google.cloud.operators.bigquery import (
+                BigQueryInsertJobOperator,
+            )
+
+            ops_found.append("BigQueryInsertJobOperator")
+        except ImportError:
+            pass
+
+        try:
+            from airflow.providers.google.cloud.operators.bigquery import (
+                BigQueryExecuteQueryOperator,
+            )
+
+            ops_found.append("BigQueryExecuteQueryOperator")
+        except ImportError:
+            pass
+
+        # Check versions
+        try:
+            bq_version = version("google-cloud-bigquery")
+        except PackageNotFoundError:
+            bq_version = "unknown"
+
+        try:
+            provider_version = version("apache-airflow-providers-google")
+        except PackageNotFoundError:
+            provider_version = "unknown"
+
+        # Check for reservation field support in bigquery library
+        # The property was added in google-cloud-bigquery 3.1.0
+        has_reservation_field = hasattr(bigquery.QueryJobConfig, "reservation")
+
+        logger.info(
+            "Airflow Reservations Initialized: [Airflow %s] [Google Provider %s] [BigQuery Client %s] [Reservation Support: %s] [Detected Operators: %s]",
+            airflow.__version__,
+            provider_version,
+            bq_version,
+            has_reservation_field,
+            ", ".join(ops_found) if ops_found else "None",
         )
-
-        ops_found.append("BigQueryInsertJobOperator")
-    except ImportError:
+    except Exception:
+        # Silently fail if dependencies are missing during initialization
         pass
-
-    try:
-        from airflow.providers.google.cloud.operators.bigquery import (
-            BigQueryExecuteQueryOperator,
-        )
-
-        ops_found.append("BigQueryExecuteQueryOperator")
-    except ImportError:
-        pass
-
-    # Check for reservation field support in bigquery library
-    # The property was added in google-cloud-bigquery 3.1.0
-    has_reservation_field = hasattr(bigquery.QueryJobConfig, "reservation")
-
-    logger.info(
-        "Airflow Reservations Initialized: [Airflow %s] [BigQuery Library Reservation Support: %s] [Detected Operators: %s]",
-        airflow.__version__,
-        has_reservation_field,
-        ", ".join(ops_found) if ops_found else "None",
-    )
 
 
 # Executed when module is loaded
@@ -88,118 +106,57 @@ def _get_task_identifiers(task: BaseOperator) -> tuple[str, str]:
     return dag_id or "unknown_dag", task.task_id
 
 
-def _inject_reservation_into_configuration(
+def _inject_reservation_into_task_attribute(
     task: BaseOperator,
     reservation: str,
+    attribute_name: str,
 ) -> bool:
-    """Inject reservation into BigQuery operator configuration.
-
-    Modifies the task's configuration dict to set the reservation parameter.
-    This is safer than SQL injection as it doesn't modify the query string.
+    """Inject reservation into a BigQuery operator's attribute.
 
     Args:
         task: The BigQuery operator task.
         reservation: The reservation ID to inject.
+        attribute_name: The name of the task attribute to inject into
+            (e.g., 'configuration' or 'api_resource_configs').
 
     Returns:
         True if injection was successful, False otherwise.
     """
-    # If the task's configuration is None or missing, we try to initialize it.
-    if getattr(task, "configuration", None) is None:
+    # Initialize attribute if it doesn't exist
+    if getattr(task, attribute_name, None) is None:
         try:
-            setattr(task, "configuration", {})
-            logger.info("Initialized configuration attribute for task %s", task.task_id)
+            setattr(task, attribute_name, {})
+            logger.info(
+                "Initialized %s attribute for task %s", attribute_name, task.task_id
+            )
         except Exception as e:
             logger.debug(
-                "Could not add configuration attribute to task %s: %s", task.task_id, e
+                "Could not add %s attribute to task %s: %s",
+                attribute_name,
+                task.task_id,
+                e,
             )
             return False
 
-    configuration = task.configuration
-    if not isinstance(configuration, dict):
-        logger.debug("Task %s configuration is not a dict", task.task_id)
+    attribute_value = getattr(task, attribute_name)
+    if not isinstance(attribute_value, dict):
+        logger.debug("Task %s %s is not a dict", task.task_id, attribute_name)
         return False
 
-
-    # 1. Set 'reservation' at the top level of JobConfiguration (Standard BigQuery API)
-    # This is the most robust way to set the reservation for any job type.
-    existing_reservation = configuration.get("reservation")
+    # Set reservation at the top level
+    existing_reservation = attribute_value.get("reservation")
     if existing_reservation == reservation:
         logger.debug(
-            "Task %s already has reservation %s set at top-level",
+            "Task %s already has reservation %s set in %s",
             task.task_id,
             reservation,
+            attribute_name,
         )
     else:
-        configuration["reservation"] = reservation
+        attribute_value["reservation"] = reservation
 
     logger.info(
-        "Injected reservation %s into task %s configuration",
-        reservation,
-        task.task_id,
-    )
-    return True
-
-
-def _inject_reservation_into_sql_attribute(
-    task: BaseOperator,
-    reservation: str,
-) -> bool:
-    """Inject reservation into BigQuery operator sql attribute via SET statement.
-
-    Args:
-        task: The BigQuery operator task.
-        reservation: The reservation ID to inject.
-
-    Returns:
-        True if injection was successful, False otherwise.
-    """
-    # Check for legacy SQL usage (SET @@reservation not supported)
-    use_legacy_sql = getattr(task, "use_legacy_sql", None)
-
-    # Fallback to checking configuration if attribute missing
-    if use_legacy_sql is None and hasattr(task, "configuration"):
-        config = getattr(task, "configuration", {})
-        if isinstance(config, dict):
-            use_legacy_sql = config.get("query", {}).get("useLegacySql")
-
-    if use_legacy_sql is True:
-        logger.debug(
-            "Task %s uses Legacy SQL and cannot use SQL injection for reservation. Skipping.",
-            task.task_id,
-        )
-        return False
-
-    if not hasattr(task, "sql"):
-        return False
-
-    original_sql = task.sql
-    if not original_sql:
-        return False
-
-    # Handle both string and list of strings
-    if isinstance(original_sql, str):
-
-        reservation_sql = format_reservation_sql(reservation)
-        task.sql = reservation_sql + original_sql
-
-    elif isinstance(original_sql, (list, tuple)):
-        # For multiple SQL statements, prepend to the first one
-        if not original_sql:
-            return False
-
-        first_sql = original_sql[0]
-        if "SET @@reservation" in str(first_sql):
-            return False
-
-        reservation_sql = format_reservation_sql(reservation)
-        modified_list = [reservation_sql + str(first_sql)] + list(original_sql[1:])
-        task.sql = modified_list
-    else:
-        return False
-
-    logger.info(
-        "Injected reservation %s into task %s via SQL injection",
+        "Injected reservation %s into task %s",
         reservation,
         task.task_id,
     )
@@ -221,14 +178,16 @@ def task_policy(task: BaseOperator) -> None:
     if not reservation:
         return
 
-    # 1. BigQueryInsertJobOperator: Always uses configuration dict
+    # BigQueryInsertJobOperator: Uses configuration dict
     if task.task_type == "BigQueryInsertJobOperator":
-        _inject_reservation_into_configuration(task, reservation)
+        _inject_reservation_into_task_attribute(task, reservation, "configuration")
         return
 
-    # 2. BigQueryExecuteQueryOperator: Uses SQL string input
+    # BigQueryExecuteQueryOperator: Uses api_resource_configs
     if task.task_type == "BigQueryExecuteQueryOperator":
-        _inject_reservation_into_sql_attribute(task, reservation)
+        _inject_reservation_into_task_attribute(
+            task, reservation, "api_resource_configs"
+        )
         return
 
     # 3. Unsupported operators: Skip
