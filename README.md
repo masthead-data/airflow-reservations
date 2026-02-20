@@ -125,18 +125,17 @@ For custom BigQuery API calls in `PythonOperator`, use the provided `get_reserva
 from airflow_reservations import get_reservation
 
 def my_bigquery_task(**context):
-    dag_id = context['dag'].dag_id
-    task_id = context['task'].task_id
+    ti = context['task_instance']
 
     existing_labels = {"team": "finance"}
     labels = {
       **existing_labels,
-      "airflow-dag": dag_id,
-      "airflow-task": task_id,
+      "airflow-dag": ti.dag_id,
+      "airflow-task": ti.task_id,
     }
 
     # Look up reservation for this task
-    reservation = get_reservation(dag_id, task_id)
+    reservation = get_reservation(ti.dag_id, ti.task_id)
 
     # When executing, ensure labels and the reservation are included in the job config
     job_config = bigquery.QueryJobConfig(

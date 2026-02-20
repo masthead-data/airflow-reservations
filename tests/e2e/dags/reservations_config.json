@@ -8,6 +8,7 @@
                 "test_reservation_dag.test_bq_execute_query_std_sql_applied",
                 "test_reservation_dag.test_bq_execute_query_manual_res_applied",
                 "test_reservation_dag.tg_group.test_bq_insert_job_nested_applied",
+                "test_reservation_dag.tg_group.test_python_custom_operator_nested_applied",
                 "test_reservation_dag.test_python_custom_operator_applied"
             ]
         },
