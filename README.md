@@ -67,7 +67,7 @@ Create a `reservations_config.json` file in your DAGs folder:
       "tasks": [
         "finance_dag.daily_report",
         "etl_dag.load_analytics",
-        "etl_dag.etl_group.transform_data"
+        "etl_dag.etl_group-transform_data"
       ]
     },
     {
@@ -130,8 +130,8 @@ def my_bigquery_task(**context):
     existing_labels = {"team": "finance"}
     labels = {
       **existing_labels,
-      "airflow-dag": ti.dag_id,
-      "airflow-task": ti.task_id,
+      "airflow-dag": ti.dag_id.lower(),
+      "airflow-task": ti.task_id.lower().replace(".", "-"), # dots are not allowed in labels
     }
 
     # Look up reservation for this task
@@ -171,7 +171,7 @@ Verify:
 1. The task type is `BigQueryInsertJobOperator` or `BigQueryExecuteQueryOperator`
 2. BigQuery jobs include `airflow-dag` and `airflow-task` labels (see `Prerequisite: BigQuery Job Labels` above)
 3. The `dag_id.task_id` key exactly matches the config
-4. For TaskGroups, the full path is included (e.g., `dag.group.task`)
+4. For TaskGroups, the full path is included (e.g., `dag.group.task`), and in the config JSON the second dot is replaced with a dash (e.g., `dag.group-task`).
 
 ## Supported Versions
 

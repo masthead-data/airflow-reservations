@@ -30,7 +30,7 @@ def temp_config_file():
                     {
                         "tag": "taskgroup-test",
                         "reservation": "projects/p3/locations/US/reservations/res3",
-                        "tasks": ["dag_c.group.nested"],
+                        "tasks": ["dag_c.group-nested"],
                     },
                     {
                         "tag": "on_demand",

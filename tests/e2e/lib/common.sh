@@ -312,11 +312,15 @@ verify_all_tasks() {
     local configured_tasks
     configured_tasks=$(echo "$config_map" | cut -d'|' -f1 | sort | uniq | grep -v "^$")
 
+    # Normalize Airflow task IDs: replace dots with hyphens (TaskGroup separator → BQ label format)
+    local normalized_tasks
+    normalized_tasks=$(echo "$tasks" | tr '.' '-')
+
     local IFS=$'\n'
     for conf_task in $configured_tasks; do
-        if ! echo "$tasks" | grep -q "^${conf_task}$"; then
+        if ! echo "$normalized_tasks" | grep -q "^${conf_task}$"; then
             if [[ "$conf_task" == test_bq_execute_query_* ]] && [[ "$airflow_version" == "3" ]]; then
-                log_info "⏭️  Configured task '$conf_task' not in DAG (skipped - ExecuteQuery may not be available in Airflow 3)"
+                log_info "⏭️  Configured task '$conf_task' not in DAG (skipped - BigQueryExecuteQueryOperator may not be available in Airflow 3)"
             else
                 log_warn "⚠️  Configured task '$conf_task' NOT found in DAG tasks list"
                 failed=$((failed + 1))
@@ -350,8 +354,11 @@ verify_all_tasks() {
         fi
 
         # Lookup reservation from config_map
+        # Normalize task_id: replace dots with hyphens to match the config format (BQ label format)
+        local normalized_task_id
+        normalized_task_id=$(echo "$task_id" | tr '.' '-')
         local expected_reservation=""
-        expected_reservation=$(echo "$config_map" | grep "^${task_id}|" | cut -d'|' -f2)
+        expected_reservation=$(echo "$config_map" | grep "^${normalized_task_id}|" | cut -d'|' -f2)
 
         if [ -n "$expected_reservation" ]; then
             # Task is configured
