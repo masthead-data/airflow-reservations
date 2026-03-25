@@ -213,7 +213,11 @@ def get_reservation(dag_id: str, task_id: str) -> str | None:
     # Ensure config is loaded
     load_config()
 
-    lookup_key = f"{dag_id}.{task_id}"
+    # BQ labels don't allow dots, so Masthead stores task IDs with hyphens
+    # (matching the default airflow-task label:
+    # https://github.com/search?q=repo%3Aapache%2Fairflow+_add_job_labels&type=code
+    normalized_task_id = task_id.replace(".", "-")
+    lookup_key = f"{dag_id}.{normalized_task_id}"
 
     # Return the reservation if in lookup, None otherwise
     result = _reservation_lookup.get(lookup_key)
@@ -235,7 +239,9 @@ def get_reservation_entry(dag_id: str, task_id: str) -> dict[str, Any] | None:
         The config entry dict if found, None otherwise.
     """
     config = load_config()
-    lookup_key = f"{dag_id}.{task_id}"
+    # BQ labels don't allow dots, so Masthead stores task IDs with hyphens
+    normalized_task_id = task_id.replace(".", "-")
+    lookup_key = f"{dag_id}.{normalized_task_id}"
 
     for entry in config.get("reservation_config", []):
         if isinstance(entry, dict):

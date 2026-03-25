@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+## [0.2.1] - 2026-03-20
+
+### Fixed
+
+- Task IDs are normalized by replacing dots with hyphens for BigQuery label compatibility when TaskGroups are used.
+
 ## [0.2.0] - 2026-02-09
 
 ### Added
