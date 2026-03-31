@@ -42,7 +42,7 @@ format:
 	.venv/bin/python -m black src/ tests/
 
 build:
-	.venv/bin/python -m hatch build
+	.venv/bin/python -m build
 
 publish:
 	@echo "Triggering release via GitHub Actions..."
