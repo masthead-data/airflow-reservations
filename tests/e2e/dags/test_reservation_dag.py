@@ -75,12 +75,10 @@ def custom_python_bq_task(**context):
         from google.cloud import bigquery
 
         client = bigquery.Client()
-        job_config = bigquery.QueryJobConfig(
-            use_query_cache=False
-        )
+        job_config = bigquery.QueryJobConfig(use_query_cache=False)
 
         if reservation:
-            # Setting reservation via _properties to support older versions of 
+            # Setting reservation via _properties to support older versions of
             # google-cloud-bigquery that don't have it as a first-class property
             job_config._properties["reservation"] = reservation
             print(f"✅ Applied reservation: {reservation}")
@@ -205,9 +203,7 @@ with DAG(
         test_bq_execute_query_std_sql_applied = BigQueryExecuteQueryOperator(
             task_id="test_bq_execute_query_std_sql_applied",
             sql="SELECT 'test_bq_execute_query_std_sql_applied' as task_name",
-            api_resource_configs={
-                "query": {"useQueryCache": False}
-            },
+            api_resource_configs={"query": {"useQueryCache": False}},
             location="US",
         )
 
