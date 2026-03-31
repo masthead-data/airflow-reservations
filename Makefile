@@ -1,4 +1,4 @@
-.PHONY: install install-dev test test-cov lint format e2e e2e-airflow2 e2e-airflow3 e2e-all clean help setup
+.PHONY: install install-dev test test-cov lint format build publish e2e e2e-airflow2 e2e-airflow3 e2e-all clean help setup
 
 # Default target
 help:
@@ -10,6 +10,8 @@ help:
 	@echo "  test-cov       Run tests with coverage"
 	@echo "  lint           Run linting"
 	@echo "  format         Format code"
+	@echo "  build          Build package"
+	@echo "  publish        Trigger publishing by tracking and pushing a version tag"
 	@echo "  e2e            Run E2E tests with Airflow 2.x (default, requires Docker)"
 	@echo "  e2e-airflow2   Run E2E tests with Airflow 2.x (requires Docker)"
 	@echo "  e2e-airflow3   Run E2E tests with Airflow 3.x (requires Docker)"
@@ -41,6 +43,14 @@ format:
 
 build:
 	.venv/bin/python -m hatch build
+
+publish:
+	@echo "Triggering release via GitHub Actions..."
+	@VERSION=$$(.venv/bin/python -m hatch version); \
+	if [ -z "$$VERSION" ]; then echo "Failed to get version from hatch. Is .venv created?"; exit 1; fi; \
+	echo "Tagging version v$$VERSION"; \
+	git tag -a v$$VERSION -m "Release v$$VERSION"; \
+	git push origin v$$VERSION
 
 e2e: e2e-airflow2 e2e-airflow3
 	@echo ""
