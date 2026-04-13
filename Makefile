@@ -46,8 +46,8 @@ build:
 
 publish:
 	@echo "Triggering release via GitHub Actions..."
-	@VERSION=$$(.venv/bin/python -m hatch version); \
-	if [ -z "$$VERSION" ]; then echo "Failed to get version from hatch. Is .venv created?"; exit 1; fi; \
+	@VERSION=$$(.venv/bin/python -c "from airflow_reservations import __version__; print(__version__)"); \
+	if [ -z "$$VERSION" ]; then echo "Failed to get version. Is .venv created?"; exit 1; fi; \
 	echo "Tagging version v$$VERSION"; \
 	git tag -a v$$VERSION -m "Release v$$VERSION"; \
 	git push origin v$$VERSION
