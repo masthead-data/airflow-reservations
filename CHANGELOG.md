@@ -20,6 +20,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+## [0.2.2] - 2026-04-13
+
+### Added
+
+- `SECURITY.md` with vulnerability reporting process and response SLA.
+- `py.typed` PEP 561 marker; package now declares itself fully typed.
+- CycloneDX SBOM generated at release time and attached to every GitHub Release.
+- Sigstore PEP 740 attestations published alongside PyPI artifacts for cryptographic build provenance.
+
+### Security
+
+- All GitHub Actions pinned to immutable commit SHAs to prevent tag-hijacking attacks.
+- `pip-audit` added as a required CI step; every push is scanned against known CVE databases.
+
 ## [0.2.1] - 2026-03-31
 
 ### Fixed
@@ -48,7 +62,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release of `airflow-reservations` package.
 
-[Unreleased]: https://github.com/masthead-data/airflow-reservations/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/masthead-data/airflow-reservations/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/masthead-data/airflow-reservations/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/masthead-data/airflow-reservations/releases/tag/v0.2.1
 [0.2.0]: https://github.com/masthead-data/airflow-reservations/releases/tag/v0.2.0
 [0.1.0]: https://github.com/masthead-data/airflow-reservations/releases/tag/v0.1.0
