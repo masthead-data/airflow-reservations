@@ -78,6 +78,8 @@ _config_cache: dict[str, Any] | None = None
 _config_mtime: float = 0.0
 # Derived lookup table: task_key -> reservation (str) or _SKIP_TASK sentinel
 _reservation_lookup: dict[str, str | object] = {}
+# Lookup table for full entry: task_key -> config entry dict
+_entry_lookup: dict[str, dict[str, Any]] = {}
 
 
 def get_config_path() -> str:
@@ -89,8 +91,8 @@ def get_config_path() -> str:
     return os.environ.get(CONFIG_PATH_ENV_VAR, DEFAULT_CONFIG_PATH)
 
 
-def _build_reservation_lookup(config: dict[str, Any]) -> dict[str, str | object]:
-    """Build a lookup table from task key to reservation.
+def _build_reservation_lookup(config: dict[str, Any]) -> tuple[dict[str, str | object], dict[str, dict[str, Any]]]:
+    """Build lookup tables from task key to reservation and config entry.
 
     Semantics:
     - reservation = "projects/..." → Store the path (will be injected)
@@ -101,10 +103,14 @@ def _build_reservation_lookup(config: dict[str, Any]) -> dict[str, str | object]
         config: The loaded configuration dictionary.
 
     Returns:
-        Dictionary mapping 'dag_id.task_id' to reservation ID string.
-        Tasks with null reservation are NOT included (they get skipped).
+        Tuple of two dictionaries:
+        1. Dictionary mapping 'dag_id.task_id' to reservation ID string.
+           Tasks with null reservation are NOT included (they get skipped).
+        2. Dictionary mapping 'dag_id.task_id' to full config entry dict.
+           Tasks with null reservation ARE included.
     """
-    lookup: dict[str, str | object] = {}
+    res_lookup: dict[str, str | object] = {}
+    entry_lookup: dict[str, dict[str, Any]] = {}
 
     reservation_config = config.get("reservation_config", [])
 
@@ -115,16 +121,18 @@ def _build_reservation_lookup(config: dict[str, Any]) -> dict[str, str | object]
         reservation = entry.get("reservation")
         tasks = entry.get("tasks", [])
 
-        # null reservation means skip this task (don't add to lookup)
-        if reservation is None:
-            continue
-
-        # "none" and other string values are stored as-is
+        # Store entry in entry_lookup (first match wins for get_reservation_entry behavior)
         for task_key in tasks:
             if isinstance(task_key, str):
-                lookup[task_key] = reservation
+                if task_key not in entry_lookup:
+                    entry_lookup[task_key] = entry
 
-    return lookup
+                # "none" and other string values are stored as-is
+                if reservation is not None:
+                    # Last non-null match wins for get_reservation behavior
+                    res_lookup[task_key] = reservation
+
+    return res_lookup, entry_lookup
 
 
 def load_config(force_reload: bool = False) -> dict[str, Any]:
@@ -139,7 +147,7 @@ def load_config(force_reload: bool = False) -> dict[str, Any]:
     Returns:
         Dictionary with configuration, or empty dict if file doesn't exist or is invalid.
     """
-    global _config_cache, _config_mtime, _reservation_lookup
+    global _config_cache, _config_mtime, _reservation_lookup, _entry_lookup
 
     config_path = get_config_path()
 
@@ -167,8 +175,8 @@ def load_config(force_reload: bool = False) -> dict[str, Any]:
             _config_cache = config
             _config_mtime = current_mtime
 
-            # Rebuild lookup table
-            _reservation_lookup = _build_reservation_lookup(config)
+            # Rebuild lookup tables
+            _reservation_lookup, _entry_lookup = _build_reservation_lookup(config)
 
             logger.info("Loaded Masthead config from %s", config_path)
             return config
@@ -238,15 +246,10 @@ def get_reservation_entry(dag_id: str, task_id: str) -> dict[str, Any] | None:
     Returns:
         The config entry dict if found, None otherwise.
     """
-    config = load_config()
+    # Ensure config is loaded
+    load_config()
     # BQ labels don't allow dots, so Masthead stores task IDs with hyphens
     normalized_task_id = task_id.replace(".", "-")
     lookup_key = f"{dag_id}.{normalized_task_id}"
 
-    for entry in config.get("reservation_config", []):
-        if isinstance(entry, dict):
-            tasks = entry.get("tasks", [])
-            if lookup_key in tasks:
-                return entry
-
-    return None
+    return _entry_lookup.get(lookup_key)

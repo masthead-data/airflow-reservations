@@ -58,10 +58,12 @@ def reset_config_cache():
     config._config_cache = None
     config._config_mtime = 0.0
     config._reservation_lookup = {}
+    config._entry_lookup = {}
     yield
     config._config_cache = None
     config._config_mtime = 0.0
     config._reservation_lookup = {}
+    config._entry_lookup = {}
 
 
 class TestLoadConfig:
@@ -221,11 +223,12 @@ class TestBuildReservationLookup:
             ]
         }
 
-        lookup = config._build_reservation_lookup(test_config)
+        lookup, entry_lookup = config._build_reservation_lookup(test_config)
 
         assert lookup["d.t1"] == "res1"
         assert lookup["d.t2"] == "res1"
         assert lookup["d.t3"] == "res2"
+        assert entry_lookup["d.t1"]["tag"] == "t1"
 
     def test_none_string_is_stored(self):
         """Test that 'none' string is stored (for on-demand injection)."""
@@ -235,7 +238,7 @@ class TestBuildReservationLookup:
             ]
         }
 
-        lookup = config._build_reservation_lookup(test_config)
+        lookup, entry_lookup = config._build_reservation_lookup(test_config)
 
         assert "d.t1" in lookup
         assert lookup["d.t1"] == "none"
@@ -248,15 +251,18 @@ class TestBuildReservationLookup:
             ]
         }
 
-        lookup = config._build_reservation_lookup(test_config)
+        lookup, entry_lookup = config._build_reservation_lookup(test_config)
 
         # Task should NOT be in lookup - it's skipped
         assert "d.t1" not in lookup
+        # But should be in entry lookup
+        assert "d.t1" in entry_lookup
 
     def test_handles_empty_config(self):
         """Test handling of empty config."""
-        lookup = config._build_reservation_lookup({})
+        lookup, entry_lookup = config._build_reservation_lookup({})
         assert lookup == {}
+        assert entry_lookup == {}
 
     def test_handles_malformed_entries(self):
         """Test that malformed entries are skipped."""
@@ -268,6 +274,7 @@ class TestBuildReservationLookup:
             ]
         }
 
-        lookup = config._build_reservation_lookup(test_config)
+        lookup, entry_lookup = config._build_reservation_lookup(test_config)
 
         assert lookup == {"d.t1": "res"}
+        assert entry_lookup["d.t1"]["tag"] == "valid"
