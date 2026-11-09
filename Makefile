@@ -36,10 +36,12 @@ test-cov:
 	.venv/bin/pytest tests/ --cov=airflow_reservations --cov-report=term-missing
 
 lint:
-	.venv/bin/python -m black --check src/ tests/
+	.venv/bin/ruff check src/ tests/
+	.venv/bin/ruff format --check src/ tests/
 
 format:
-	.venv/bin/python -m black src/ tests/
+	.venv/bin/ruff check --fix src/ tests/
+	.venv/bin/ruff format src/ tests/
 
 build:
 	.venv/bin/python -m build
