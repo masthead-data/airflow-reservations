@@ -184,7 +184,6 @@ with DAG(
     catchup=False,
     tags=["test", "reservations", "e2e"],
 ) as dag:
-
     # BigQueryInsertJobOperator
     test_bq_insert_job_std_sql_applied = BigQueryInsertJobOperator(
         task_id="test_bq_insert_job_std_sql_applied",

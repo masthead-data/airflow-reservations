@@ -39,7 +39,7 @@ def _init_debug_info():
     ops_found = []
     try:
         from airflow.providers.google.cloud.operators.bigquery import (
-            BigQueryInsertJobOperator,
+            BigQueryInsertJobOperator,  # noqa: F401
         )
 
         ops_found.append("BigQueryInsertJobOperator")
@@ -48,7 +48,7 @@ def _init_debug_info():
 
     try:
         from airflow.providers.google.cloud.operators.bigquery import (
-            BigQueryExecuteQueryOperator,
+            BigQueryExecuteQueryOperator,  # noqa: F401
         )
 
         ops_found.append("BigQueryExecuteQueryOperator")
