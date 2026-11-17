@@ -91,7 +91,9 @@ def get_config_path() -> str:
     return os.environ.get(CONFIG_PATH_ENV_VAR, DEFAULT_CONFIG_PATH)
 
 
-def _build_reservation_lookup(config: dict[str, Any]) -> tuple[dict[str, str | object], dict[str, dict[str, Any]]]:
+def _build_reservation_lookup(
+    config: dict[str, Any],
+) -> tuple[dict[str, str | object], dict[str, dict[str, Any]]]:
     """Build lookup tables from task key to reservation and config entry.
 
     Semantics:
