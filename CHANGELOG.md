@@ -12,8 +12,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `get_reservation_entry()` now uses a lookup table built when the config is loaded, instead of scanning every config entry on each call. When a task appears in several entries, the first matching entry is still returned.
-
 ### Deprecated
 
 ### Removed
@@ -21,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 ### Security
+
+## [0.2.3] - 2026-11-17
+
+### Changed
+
+- `get_reservation_entry()` now uses a lookup table built when the config is loaded, instead of scanning every config entry on each call. When a task appears in several entries, the first matching entry is still returned.
 
 ## [0.2.2] - 2026-04-13
 
