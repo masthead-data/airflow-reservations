@@ -71,42 +71,71 @@ def custom_python_bq_task(**context):
     '{ti.task_id}' AS task_name,
     'PythonOperator' AS operator_type"""
 
-    try:
-        from google.cloud import bigquery
+    from google.cloud import bigquery
 
-        client = bigquery.Client()
-        job_config = bigquery.QueryJobConfig(use_query_cache=False)
+    client = bigquery.Client()
+    job_config = bigquery.QueryJobConfig(use_query_cache=False)
 
-        if reservation:
-            # Setting reservation via _properties to support older versions of
-            # google-cloud-bigquery that don't have it as a first-class property
-            job_config._properties["reservation"] = reservation
-            print(f"✅ Applied reservation: {reservation}")
+    if reservation:
+        # Setting reservation via _properties to support older versions of
+        # google-cloud-bigquery that don't have it as a first-class property
+        job_config._properties["reservation"] = reservation
+        print(f"✅ Applied reservation: {reservation}")
 
-            # Log in a format that common.sh can detect
-            print(f"INFO - Applied reservation: {{'reservation': '{reservation}'}}")
+        # Log in a format that common.sh can detect
+        print(f"INFO - Applied reservation: {{'reservation': '{reservation}'}}")
 
-        query_job = client.query(sql, job_config=job_config)
-        query_job.result()
+    # Let BigQuery errors fail the task instead of hiding them from the assertion
+    query_job = client.query(sql, job_config=job_config)
+    query_job.result()
 
-        # Return the job_id so that the assertion task can fetch it
-        return query_job.job_id
-    except Exception as e:
-        print(f"⚠️ WARNING: Could not perform BigQuery job: {e}")
-        return {
-            "error": str(e),
-        }
+    # Return the job_id so that the assertion task can fetch it
+    return query_job.job_id
+
+
+_UNCONFIGURED = object()
+
+
+def _expected_reservation(dag_id: str, task_id: str):
+    """Read the expected reservation straight from the test config file.
+
+    Deliberately does not use airflow_reservations, so the assertion does not
+    trust the code under test. Returns the reservation string ("none" included),
+    None for an explicit null, or _UNCONFIGURED when the task is not listed.
+    """
+    import json
+    import os
+
+    config_path = os.path.join(os.path.dirname(__file__), "reservations_config.json")
+    with open(config_path, encoding="utf-8") as f:
+        config = json.load(f)
+
+    task_key = f"{dag_id}.{task_id.replace('.', '-')}"
+    for entry in config["reservation_config"]:
+        if task_key in entry["tasks"]:
+            return entry["reservation"]
+    return _UNCONFIGURED
+
+
+def _reservation_id_from_path(path: str) -> str:
+    """Convert projects/P/locations/L/reservations/R to BigQuery's P:L.R form."""
+    parts = path.split("/")
+    if len(parts) != 6 or parts[0::2] != ["projects", "locations", "reservations"]:
+        raise ValueError(f"Unexpected reservation path in test config: {path}")
+    return f"{parts[1]}:{parts[3]}.{parts[5]}"
 
 
 def assert_bigquery_job(subject_task_id: str, **context):
-    """Assertion task that validates the upstream BigQuery job."""
+    """Assert the reservation that the upstream BigQuery job actually ran on."""
     from google.cloud import bigquery
-
-    from airflow_reservations.config import get_reservation
 
     ti = context["task_instance"]
 
-    expected_reservation = get_reservation(ti.dag_id, subject_task_id)
+    expected_reservation = _expected_reservation(ti.dag_id, subject_task_id)
+    if expected_reservation is _UNCONFIGURED:
+        raise RuntimeError(
+            f"Task {subject_task_id} has an assertion but is not in reservations_config.json"
+        )
     print(
         f"Checking task {subject_task_id} against expected reservation: {expected_reservation}"
     )
@@ -133,38 +162,35 @@ def assert_bigquery_job(subject_task_id: str, **context):
             f"BigQuery job {job_id} for {ti.dag_id}.{subject_task_id} failed: {job.error_result}"
         )
 
-    if not expected_reservation or expected_reservation == "none":
-        return
+    # configuration.reservation is what the job requested;
+    # statistics.reservation_id is where BigQuery actually ran it (P:L.R, empty
+    # for on-demand).
+    requested = job._properties.get("configuration", {}).get("reservation")
+    actual = job._properties.get("statistics", {}).get("reservation_id")
+    print(f"Job {job_id}: requested={requested!r}, ran on={actual!r}")
 
-    actual_reservation = None
-    reservation_usage = getattr(job, "reservation_usage", None)
-    if reservation_usage:
-        try:
-            actual_reservation = reservation_usage[0].name
-        except Exception:
-            actual_reservation = None
-
-    if not actual_reservation:
-        stats = getattr(job, "_properties", {}).get("statistics", {})
-        actual_reservation = stats.get("reservation_id")
-
-    if actual_reservation:
-        is_match = expected_reservation in actual_reservation
-        if not is_match:
-            exp_name = expected_reservation.split("/")[-1]
-            act_name = (
-                str(actual_reservation)
-                .replace(".", "/")
-                .replace(":", "/")
-                .split("/")[-1]
-            )
-            is_match = exp_name == act_name
-
-        if not is_match:
+    subject = f"BigQuery job {job_id} for {ti.dag_id}.{subject_task_id}"
+    if expected_reservation is None:
+        # null: the package must leave the job alone, so it runs on the
+        # project's default assignment, whatever that is.
+        if requested is not None:
             raise AssertionError(
-                f"Expected BigQuery job {job_id} for {ti.dag_id}.{subject_task_id} to use reservation containing '{expected_reservation}', but got {actual_reservation}"
+                f"{subject} should not request a reservation, but requested {requested!r}"
             )
-        print(f"✅ Job {job_id} correctly used reservation: {actual_reservation}")
+    elif expected_reservation == "none":
+        if requested != "none" or actual:
+            raise AssertionError(
+                f"{subject} should run on-demand (requested 'none', no reservation), "
+                f"but requested {requested!r} and ran on {actual!r}"
+            )
+    else:
+        expected_id = _reservation_id_from_path(expected_reservation)
+        if requested != expected_reservation or actual != expected_id:
+            raise AssertionError(
+                f"{subject} should request {expected_reservation!r} and run on "
+                f"{expected_id!r}, but requested {requested!r} and ran on {actual!r}"
+            )
+    print(f"✅ {subject} matches the expected reservation")
 
 
 default_args = {
